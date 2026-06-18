@@ -187,6 +187,7 @@ const flightFromRow = (Model, row) =>
 const bookingFromRow = (Model, row) =>
   new Model({
     _id: row.id,
+    bookingId: row.booking_id || row.booking_code,
     bookingCode: row.booking_code,
     user: row.user_id,
     vendor: row.vendor_id || undefined,
@@ -194,6 +195,8 @@ const bookingFromRow = (Model, row) =>
     module: row.module,
     title: row.title,
     movieId: row.movie_id || undefined,
+    theatreId: row.theatre_id || undefined,
+    screenId: row.screen_id || undefined,
     showId: row.show_id || undefined,
     flightId: row.flight_id || undefined,
     customerName: row.customer_name || "",
@@ -203,9 +206,17 @@ const bookingFromRow = (Model, row) =>
     showDate: row.show_date || "",
     showTime: row.show_time || "",
     seats: parseJson(row.seats, []),
+    seatNumbers: parseJson(row.seat_numbers, parseJson(row.seats, [])),
     amount: Number(row.amount || 0),
+    totalAmount: Number(row.total_amount || row.amount || 0),
     status: row.status || "confirmed",
     paymentStatus: row.payment_status || "paid",
+    bookingStatus: row.booking_status || row.status || "confirmed",
+    qrToken: row.qr_token || "",
+    qrCodeUrl: row.qr_code_url || "",
+    checkedIn: Boolean(row.checked_in),
+    checkedInAt: row.checked_in_at || null,
+    scannedBy: row.scanned_by || "",
     details: parseJson(row.details, {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -589,20 +600,26 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
           const details = document.details || {};
           const flightId = document.flightId || details.flightId || details.flight?._id || details.flight?.id || null;
           const bookingCode = document.bookingCode || `TH${Date.now().toString(36).toUpperCase()}`;
+          const bookingId = document.bookingId || bookingCode;
 
           document.bookingCode = bookingCode;
+          document.bookingId = bookingId;
 
           await pool.query(
             `INSERT INTO bookings (
-              id, booking_code, user_id, vendor_id, module, title, movie_id, show_id, flight_id,
+              id, booking_id, booking_code, user_id, vendor_id, module, title, movie_id, theatre_id, screen_id, show_id, flight_id,
               customer_name, customer_email, customer_mobile, theatre, show_date, show_time,
-              seats, amount, status, payment_status, details, created_at, updated_at
+              seats, seat_numbers, amount, total_amount, status, payment_status, booking_status,
+              qr_token, qr_code_url, checked_in, checked_in_at, scanned_by, details, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
+              booking_id = VALUES(booking_id),
               vendor_id = VALUES(vendor_id),
               title = VALUES(title),
               movie_id = VALUES(movie_id),
+              theatre_id = VALUES(theatre_id),
+              screen_id = VALUES(screen_id),
               show_id = VALUES(show_id),
               flight_id = VALUES(flight_id),
               customer_name = VALUES(customer_name),
@@ -612,19 +629,30 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               show_date = VALUES(show_date),
               show_time = VALUES(show_time),
               seats = VALUES(seats),
+              seat_numbers = VALUES(seat_numbers),
               amount = VALUES(amount),
+              total_amount = VALUES(total_amount),
               status = VALUES(status),
               payment_status = VALUES(payment_status),
+              booking_status = VALUES(booking_status),
+              qr_token = VALUES(qr_token),
+              qr_code_url = VALUES(qr_code_url),
+              checked_in = VALUES(checked_in),
+              checked_in_at = VALUES(checked_in_at),
+              scanned_by = VALUES(scanned_by),
               details = VALUES(details),
               updated_at = VALUES(updated_at)`,
             [
               document._id,
+              bookingId,
               bookingCode,
               document.user,
               document.vendorId || document.vendor || null,
               document.module || "",
               document.title || "",
               document.movieId || details.movieId || null,
+              document.theatreId || details.theatreId || null,
+              document.screenId || details.screenId || null,
               document.showId || details.showId || null,
               flightId,
               document.customerName || details.customerName || details.passenger?.name || "",
@@ -634,9 +662,17 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               details.showDate || document.showDate || "",
               details.showTime || document.showTime || "",
               JSON.stringify(document.seats || []),
+              JSON.stringify(document.seatNumbers || document.seats || []),
               Number(document.amount || 0),
+              Number(document.totalAmount || document.amount || 0),
               document.status || "confirmed",
               document.paymentStatus || "paid",
+              document.bookingStatus || document.status || "confirmed",
+              document.qrToken || null,
+              document.qrCodeUrl || null,
+              Boolean(document.checkedIn),
+              document.checkedInAt || null,
+              document.scannedBy || null,
               JSON.stringify(details),
               document.createdAt,
               document.updatedAt,

@@ -1,24 +1,38 @@
 const express = require("express");
 
 const {
+  checkInQrTicket,
   createNotification,
+  createScreen,
+  createShow,
   createStaff,
+  createTheatre,
+  deleteScreen,
+  deleteShow,
+  deleteTheatre,
   getCustomerList,
   getNotifications,
   getPayoutHistory,
   getPricing,
   getRefundRequests,
+  getScreens,
   getShowAnalytics,
+  getShows,
   getStaff,
   getTheatreOverview,
+  getTheatres,
   getTicketScanner,
   savePayout,
   savePricing,
   scanTicket,
+  updateScreen,
+  updateShow,
   updateMovieStatus,
   updateRefundStatus,
   updateShowPrice,
   updateStaff,
+  updateTheatre,
+  verifyQrTicket,
 } = require("../controllers/vendorOperationsController");
 const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 
@@ -36,7 +50,23 @@ router.use("/vendor", requireAuth, requireRole("admin", "vendor"));
 
 router.get("/vendor/ticket-scans", asyncHandler(getTicketScanner));
 router.post("/vendor/ticket-scans", asyncHandler(scanTicket));
+router.get("/vendor/qr/verify", asyncHandler(verifyQrTicket));
+router.post("/vendor/qr/verify", asyncHandler(verifyQrTicket));
+router.post("/vendor/qr/check-in", asyncHandler(checkInQrTicket));
+router.get("/vendor/qr/scans", asyncHandler(getTicketScanner));
 router.get("/vendor/theatre-overview", asyncHandler(getTheatreOverview));
+router.get("/vendor/theatres", asyncHandler(getTheatres));
+router.post("/vendor/theatres", asyncHandler(createTheatre));
+router.put("/vendor/theatres/:id", asyncHandler(updateTheatre));
+router.delete("/vendor/theatres/:id", asyncHandler(deleteTheatre));
+router.get("/vendor/screens", asyncHandler(getScreens));
+router.post("/vendor/screens", asyncHandler(createScreen));
+router.put("/vendor/screens/:id", asyncHandler(updateScreen));
+router.delete("/vendor/screens/:id", asyncHandler(deleteScreen));
+router.get("/vendor/shows", asyncHandler(getShows));
+router.post("/vendor/shows", asyncHandler(createShow));
+router.put("/vendor/shows/:id", asyncHandler(updateShow));
+router.delete("/vendor/shows/:id", asyncHandler(deleteShow));
 router.get("/vendor/show-analytics", asyncHandler(getShowAnalytics));
 router.get("/vendor/pricing", asyncHandler(getPricing));
 router.put("/vendor/pricing", asyncHandler(savePricing));

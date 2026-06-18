@@ -62,8 +62,8 @@ function MoviePayment() {
           showTime,
           seats,
           amount: totalAmount,
-          paymentStatus: "Paid",
-          bookingStatus: "Confirmed",
+          paymentStatus: "success",
+          bookingStatus: "confirmed",
           details: {
             ...payload,
             movieId: movie._id || movie.id,

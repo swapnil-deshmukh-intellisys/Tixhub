@@ -1,4 +1,5 @@
 const express = require("express");
+const crypto = require("crypto");
 
 const Booking = require("../models/Booking");
 const Flight = require("../models/Flight");
@@ -18,11 +19,30 @@ const {
 const router = express.Router();
 
 const makeBookingCode = () => `TH${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+const makeQrToken = () => `QR-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(8).toString("hex").toUpperCase()}`;
+const makeQrCodeUrl = (req, qrToken) => {
+  if (!qrToken) return "";
+  return `${req.protocol}://${req.get("host")}/api/vendor/qr/verify?token=${encodeURIComponent(qrToken)}`;
+};
+
+const withQrAliases = (booking) => {
+  if (!booking) return booking;
+  return {
+    ...booking.toObject?.() || booking,
+    qrToken: booking.qrToken || booking.qr_token || "",
+    qr_token: booking.qrToken || booking.qr_token || "",
+    qrCodeUrl: booking.qrCodeUrl || booking.qr_code_url || "",
+    qr_code_url: booking.qrCodeUrl || booking.qr_code_url || "",
+    bookingId: booking.bookingId || booking.booking_id || booking.bookingCode || "",
+    booking_id: booking.bookingId || booking.booking_id || booking.bookingCode || "",
+  };
+};
 
 const normalizePaymentStatus = (value) => {
   const status = String(value || "paid").toLowerCase();
-  if (status === "paid" || status === "pending" || status === "failed" || status === "refunded") return status;
-  return "paid";
+  if (status === "paid") return "success";
+  if (status === "success" || status === "pending" || status === "failed" || status === "refunded") return status;
+  return "success";
 };
 
 const normalizeBookingStatus = (value) => {
@@ -66,6 +86,11 @@ router.post("/bookings", async (req, res) => {
   }
 
   const vendorId = await resolveVendorId(module, req.body);
+  const paymentStatus = normalizePaymentStatus(req.body.paymentStatus || req.body.payment_status || details?.paymentStatus || details?.payment_status);
+  const bookingStatus = normalizeBookingStatus(req.body.bookingStatus || req.body.booking_status || req.body.status);
+  const qrToken = module === "movie" && paymentStatus === "success" && bookingStatus === "confirmed" ? makeQrToken() : "";
+  const qrCodeUrl = makeQrCodeUrl(req, qrToken);
+  const bookingCode = makeBookingCode();
   const booking = await Booking.create({
     user: req.user.id,
     vendor: vendorId,
@@ -75,8 +100,19 @@ router.post("/bookings", async (req, res) => {
     details: details || {},
     seats: seats || [],
     amount,
-    bookingCode: makeBookingCode(),
+    totalAmount: amount,
+    status: bookingStatus,
+    bookingStatus,
+    paymentStatus,
+    bookingCode,
+    bookingId: bookingCode,
+    qrToken,
+    qrCodeUrl,
+    checkedIn: false,
   });
+  booking.details = { ...(booking.details || {}), qrToken, qr_token: qrToken, qrCodeUrl, qr_code_url: qrCodeUrl };
+  booking.markModified?.("details");
+  await booking.save();
 
   await WalletTransaction.create({
     user: req.user.id,
@@ -85,7 +121,7 @@ router.post("/bookings", async (req, res) => {
     note: `${title} booking payment`,
   });
 
-  res.status(201).json({ message: "Booking confirmed", booking });
+  res.status(201).json({ message: "Booking confirmed", booking: withQrAliases(booking) });
 });
 
 router.post(["/bookings/movie", "/bookings/book-seat"], async (req, res) => {
@@ -99,6 +135,10 @@ router.post(["/bookings/movie", "/bookings/book-seat"], async (req, res) => {
   const customerMobile = req.body.customerMobile || req.body.details?.customerMobile || req.body.details?.passenger?.mobile || req.user.mobile || "";
   const seats = Array.isArray(req.body.seats) ? req.body.seats : [];
   const vendorId = await resolveVendorId("movie", req.body);
+  const paymentStatus = normalizePaymentStatus(req.body.paymentStatus || req.body.payment_status || req.body.details?.paymentStatus || req.body.details?.payment_status);
+  const bookingStatus = normalizeBookingStatus(req.body.bookingStatus || req.body.status);
+  const qrToken = paymentStatus === "success" && bookingStatus === "confirmed" ? makeQrToken() : "";
+  const qrCodeUrl = makeQrCodeUrl(req, qrToken);
   const theatre = req.body.theatre || req.body.details?.theatre?.name || req.body.details?.theatre || "";
   const showDate = req.body.showDate || req.body.details?.showDate || req.body.details?.showtime?.date?.value || req.body.details?.showtime?.date?.label || "";
   const showTime = req.body.showTime || req.body.details?.showTime || req.body.details?.showtime?.time || "";
@@ -166,12 +206,22 @@ router.post(["/bookings/movie", "/bookings/book-seat"], async (req, res) => {
       showDate,
       showTime,
       seatDetails,
+      qrToken,
+      qr_token: qrToken,
+      qrCodeUrl,
+      qr_code_url: qrCodeUrl,
     },
     seats,
     amount: req.body.amount,
-    status: normalizeBookingStatus(req.body.bookingStatus || req.body.status),
-    paymentStatus: normalizePaymentStatus(req.body.paymentStatus),
+    totalAmount: req.body.amount,
+    status: bookingStatus,
+    bookingStatus,
+    paymentStatus,
     bookingCode: makeBookingCode(),
+    bookingId: makeBookingCode(),
+    qrToken,
+    qrCodeUrl,
+    checkedIn: false,
   });
 
   await Movie.findByIdAndUpdate(movieId, {
@@ -182,6 +232,10 @@ router.post(["/bookings/movie", "/bookings/book-seat"], async (req, res) => {
     ...seat,
     bookingId: booking._id,
   }));
+  booking.details.qrToken = qrToken;
+  booking.details.qr_token = qrToken;
+  booking.details.qrCodeUrl = qrCodeUrl;
+  booking.details.qr_code_url = qrCodeUrl;
   booking.markModified("details");
   await booking.save();
   await markMovieSeatsBooked(seatContext, seats, booking, { customerName, customerEmail, customerMobile });
@@ -198,7 +252,7 @@ router.post(["/bookings/movie", "/bookings/book-seat"], async (req, res) => {
     emitVendorUpdated(vendorId, "newBooking", { booking, notification });
   }
 
-  res.status(201).json({ message: "Movie booking confirmed", booking });
+  res.status(201).json({ message: "Movie booking confirmed", booking: withQrAliases(booking) });
 });
 
 router.post("/bookings/flight", async (req, res) => {

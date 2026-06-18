@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { io } from "socket.io-client";
+import jsQR from "jsqr";
 import {
   BarChart3,
   Bell,
@@ -514,6 +515,7 @@ function SeatDetails({ seat, onBlock, onUnblock }) {
 function QrScannerPage({ scans, reload }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const frameRef = useRef(null);
   const [ticketCode, setTicketCode] = useState("");
   const [scanResult, setScanResult] = useState(null);
   const [cameraState, setCameraState] = useState("");
@@ -531,26 +533,34 @@ function QrScannerPage({ scans, reload }) {
   };
 
   const startCamera = async () => {
-    if (!("BarcodeDetector" in window)) {
-      setCameraState("Camera scanning needs BarcodeDetector support. Paste the QR value below on this browser.");
-      return;
-    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
       setCameraState("Scanning...");
-      const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+      const detector = "BarcodeDetector" in window ? new window.BarcodeDetector({ formats: ["qr_code"] }) : null;
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d", { willReadFrequently: true });
       const tick = async () => {
         if (!streamRef.current || !videoRef.current) return;
-        const codes = await detector.detect(videoRef.current).catch(() => []);
-        if (codes[0]?.rawValue) {
+        let rawValue = "";
+        if (detector) {
+          const codes = await detector.detect(videoRef.current).catch(() => []);
+          rawValue = codes[0]?.rawValue || "";
+        } else if (context && videoRef.current.readyState >= 2) {
+          canvas.width = videoRef.current.videoWidth;
+          canvas.height = videoRef.current.videoHeight;
+          context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          rawValue = jsQR(imageData.data, imageData.width, imageData.height)?.data || "";
+        }
+        if (rawValue) {
           stopCamera();
-          submitScan(codes[0].rawValue);
+          submitScan(rawValue);
           return;
         }
-        requestAnimationFrame(tick);
+        frameRef.current = requestAnimationFrame(tick);
       };
       tick();
     } catch (error) {
@@ -559,6 +569,8 @@ function QrScannerPage({ scans, reload }) {
   };
 
   const stopCamera = () => {
+    if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
     streamRef.current?.getTracks?.().forEach((track) => track.stop());
     streamRef.current = null;
     setCameraState("");

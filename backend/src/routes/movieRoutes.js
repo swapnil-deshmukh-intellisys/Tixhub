@@ -4,9 +4,9 @@ const router = express.Router();
 
 const Movie =
 require("../models/Movie");
-const MovieReview = require("../models/MovieReview");
 const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 const { emitVendorUpdated } = require("../socket");
+const { pool } = require("../config/db");
 
 const validateMoviePayload = (body) => {
   const requiredFields = [
@@ -97,20 +97,22 @@ router.post("/movies/:id/reviews", requireAuth, async (req, res) => {
       return res.status(400).json({ message: "Rating must be between 1 and 5" });
     }
 
-    const review = await MovieReview.create({
-      movieId: movie._id,
+    const review = {
+      id: `${Date.now().toString(16)}${Math.random().toString(16).slice(2, 14)}`.slice(0, 24),
       bookingId: req.body.bookingId || "",
-      user: req.user.id,
       userId: req.user.id,
-      vendor: movie.vendor || movie.vendorId,
+      movieId: movie._id,
       vendorId: movie.vendorId || movie.vendor,
-      userName: req.user.name || "Customer",
       rating,
-      comment: req.body.comment || "",
-      status: "published",
-    });
+      review: req.body.review || req.body.comment || "",
+    };
+    await pool.query(
+      `INSERT INTO movie_reviews (id, booking_id, user_id, movie_id, vendor_id, rating, review, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'published')`,
+      [review.id, review.bookingId, review.userId, review.movieId, review.vendorId, review.rating, review.review]
+    );
 
-    const reviews = await MovieReview.find({ movieId: movie._id, status: "published" });
+    const [reviews] = await pool.query("SELECT * FROM movie_reviews WHERE movie_id = ? AND status = 'published'", [movie._id]);
     const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     reviews.forEach((item) => {
       const key = Math.max(1, Math.min(5, Math.round(Number(item.rating || 0))));

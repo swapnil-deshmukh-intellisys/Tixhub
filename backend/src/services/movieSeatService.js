@@ -24,7 +24,7 @@ const mapSeat = (row) => ({
   customerMobile: row.customer_mobile || "",
   mobile: row.customer_mobile || "",
   email: row.customer_email || "",
-  amount: Number(row.amount || 0),
+  amount: Number(row.price || row.amount || 0),
   paymentStatus: row.payment_status || "",
   bookingStatus: row.booking_status || "",
   bookingDate: row.booking_date || "",
@@ -88,12 +88,11 @@ const ensureShowSeats = async (context = {}) => {
     context.screenId || "Screen 1",
     seat.seatType,
     seat.price,
-    seat.price,
   ]);
 
   await pool.query(
-    `INSERT IGNORE INTO movie_seats (
-      row_name, seat_number, seat_no, show_id, movie_id, theatre_id, screen_id, seat_type, price, amount
+    `INSERT IGNORE INTO seats (
+      row_name, seat_number, seat_no, show_id, movie_id, theatre_id, screen_id, seat_type, price
     ) VALUES ?`,
     [values]
   );
@@ -104,7 +103,7 @@ const ensureShowSeats = async (context = {}) => {
 const getShowSeats = async (context = {}) => {
   const { showId } = await ensureShowSeats(context);
   const [rows] = await pool.query(
-    "SELECT * FROM movie_seats WHERE show_id = ? ORDER BY row_name, CAST(seat_number AS UNSIGNED), seat_no",
+    "SELECT * FROM seats WHERE show_id = ? ORDER BY row_name, CAST(seat_number AS UNSIGNED), seat_no",
     [showId]
   );
   return rows.map(mapSeat);
@@ -115,7 +114,7 @@ const validateMovieSeatsAvailable = async (context, seats) => {
   const requestedSeats = seats.map(seatNo).filter(Boolean);
   if (!requestedSeats.length) throw new Error("At least one seat is required");
 
-  const [rows] = await pool.query("SELECT seat_no, status FROM movie_seats WHERE show_id = ? AND seat_no IN (?)", [showId, requestedSeats]);
+  const [rows] = await pool.query("SELECT seat_no, status FROM seats WHERE show_id = ? AND seat_no IN (?)", [showId, requestedSeats]);
   const statusBySeat = new Map(rows.map((row) => [row.seat_no, row.status]));
   const unavailable = requestedSeats.filter((number) => statusBySeat.get(number) && statusBySeat.get(number) !== "available");
 
@@ -134,7 +133,7 @@ const markMovieSeatsBooked = async (context, seats, booking, customer) => {
   try {
     await connection.beginTransaction();
     const [rows] = await connection.query(
-      "SELECT seat_no, status FROM movie_seats WHERE show_id = ? AND seat_no IN (?) FOR UPDATE",
+      "SELECT seat_no, status FROM seats WHERE show_id = ? AND seat_no IN (?) FOR UPDATE",
       [showId, requestedSeats]
     );
     const statusBySeat = new Map(rows.map((row) => [row.seat_no, row.status]));
@@ -147,29 +146,16 @@ const markMovieSeatsBooked = async (context, seats, booking, customer) => {
     }
 
     await connection.query(
-      `UPDATE movie_seats
+      `UPDATE seats
        SET status = 'booked',
            booked_by = ?,
            booking_id = ?,
-           customer_name = ?,
-           customer_email = ?,
-           customer_mobile = ?,
-           amount = ?,
-           payment_status = ?,
-           booking_status = ?,
-           booking_date = NOW(),
            blocked_by = NULL,
            blocked_reason = NULL
        WHERE show_id = ? AND seat_no IN (?)`,
       [
         booking.user,
-        booking._id,
-        customer.customerName || "",
-        customer.customerEmail || "",
-        customer.customerMobile || "",
-        Number(booking.amount || 0),
-        booking.paymentStatus || "paid",
-        booking.status || "confirmed",
+        booking.bookingId || booking.bookingCode || booking._id,
         showId,
         requestedSeats,
       ]
@@ -183,7 +169,7 @@ const markMovieSeatsBooked = async (context, seats, booking, customer) => {
     connection.release();
   }
 
-  const [updatedRows] = await pool.query("SELECT * FROM movie_seats WHERE show_id = ? AND seat_no IN (?)", [showId, requestedSeats]);
+  const [updatedRows] = await pool.query("SELECT * FROM seats WHERE show_id = ? AND seat_no IN (?)", [showId, requestedSeats]);
   updatedRows.map(mapSeat).forEach(emitSeatUpdated);
   return updatedRows.map(mapSeat);
 };
@@ -196,7 +182,7 @@ const setMovieSeatBlocked = async (context, seatNumber, user, reason = "") => {
   try {
     await connection.beginTransaction();
     const [rows] = await connection.query(
-      "SELECT * FROM movie_seats WHERE show_id = ? AND seat_no = ? FOR UPDATE",
+      "SELECT * FROM seats WHERE show_id = ? AND seat_no = ? FOR UPDATE",
       [showId, normalizedSeat]
     );
     const current = rows[0];
@@ -212,7 +198,7 @@ const setMovieSeatBlocked = async (context, seatNumber, user, reason = "") => {
     }
 
     await connection.query(
-      `UPDATE movie_seats
+      `UPDATE seats
        SET status = 'blocked', blocked_by = ?, blocked_reason = ?, booking_id = NULL
        WHERE show_id = ? AND seat_no = ?`,
       [user.id, reason || "Blocked by vendor", showId, normalizedSeat]
@@ -225,7 +211,7 @@ const setMovieSeatBlocked = async (context, seatNumber, user, reason = "") => {
     connection.release();
   }
 
-  const [rows] = await pool.query("SELECT * FROM movie_seats WHERE show_id = ? AND seat_no = ?", [showId, normalizedSeat]);
+  const [rows] = await pool.query("SELECT * FROM seats WHERE show_id = ? AND seat_no = ?", [showId, normalizedSeat]);
   const seat = mapSeat(rows[0]);
   emitSeatUpdated(seat);
   return seat;
@@ -234,7 +220,7 @@ const setMovieSeatBlocked = async (context, seatNumber, user, reason = "") => {
 const setMovieSeatAvailable = async (context, seatNumber) => {
   const { showId } = await ensureShowSeats(context);
   const normalizedSeat = seatNo(seatNumber);
-  const [rows] = await pool.query("SELECT * FROM movie_seats WHERE show_id = ? AND seat_no = ?", [showId, normalizedSeat]);
+  const [rows] = await pool.query("SELECT * FROM seats WHERE show_id = ? AND seat_no = ?", [showId, normalizedSeat]);
   const current = rows[0];
 
   if (!current) {
@@ -249,7 +235,7 @@ const setMovieSeatAvailable = async (context, seatNumber) => {
   }
 
   await pool.query(
-    `UPDATE movie_seats
+    `UPDATE seats
      SET status = 'available',
          blocked_by = NULL,
          blocked_reason = NULL
@@ -257,7 +243,7 @@ const setMovieSeatAvailable = async (context, seatNumber) => {
     [showId, normalizedSeat]
   );
 
-  const [updatedRows] = await pool.query("SELECT * FROM movie_seats WHERE show_id = ? AND seat_no = ?", [showId, normalizedSeat]);
+  const [updatedRows] = await pool.query("SELECT * FROM seats WHERE show_id = ? AND seat_no = ?", [showId, normalizedSeat]);
   const seat = mapSeat(updatedRows[0]);
   emitSeatUpdated(seat);
   return seat;
