@@ -1,0 +1,505 @@
+const mysql = require("mysql2/promise");
+
+const pool = mysql.createPool({
+  host: "localhost",
+  user: "root",
+  password: "Password@123",
+  database: "priyanka",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+const ensureColumn = async (connection, table, columns, name, definition) => {
+  if (!columns.has(name)) {
+    await connection.query(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  }
+};
+
+const movieStatusDefinition = "ENUM('draft','upcoming','booking_open','now_showing','house_full','ended','cancelled','active','inactive','hidden') NOT NULL DEFAULT 'draft'";
+
+const ensureUsersSchema = async (connection) => {
+  const [columns] = await connection.query("SHOW COLUMNS FROM users");
+  const columnMap = new Map(columns.map((column) => [column.Field, column]));
+  const idColumn = columnMap.get("id");
+
+  if (idColumn && /int/i.test(idColumn.Type)) {
+    await connection.query("ALTER TABLE users MODIFY id VARCHAR(24) NOT NULL");
+  }
+
+  await ensureColumn(connection, "users", columnMap, "status", "ENUM('active', 'blocked', 'pending') NOT NULL DEFAULT 'active'");
+  await ensureColumn(connection, "users", columnMap, "image", "TEXT NULL");
+  await ensureColumn(connection, "users", columnMap, "reset_password_token", "VARCHAR(255) NULL");
+  await ensureColumn(connection, "users", columnMap, "reset_password_expires", "DATETIME NULL");
+  await ensureColumn(connection, "users", columnMap, "updated_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+};
+
+const ensureMoviesSchema = async (connection) => {
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS movies (
+      id VARCHAR(24) NOT NULL PRIMARY KEY,
+      vendor_id VARCHAR(24) NULL,
+      vendor VARCHAR(24) NULL,
+      title VARCHAR(255) NOT NULL,
+      language VARCHAR(255) NOT NULL,
+      duration VARCHAR(80) NOT NULL,
+      image TEXT NOT NULL,
+      poster_url TEXT NULL,
+      banner_url TEXT NULL,
+      description TEXT NULL,
+      theatre VARCHAR(255) NOT NULL,
+      theatre_name VARCHAR(255) NULL,
+      theatre_city VARCHAR(255) NULL,
+      theatre_address TEXT NULL,
+      screen_number VARCHAR(80) NULL,
+      show_date VARCHAR(80) NULL,
+      show_time VARCHAR(80) NULL,
+      show_times JSON NULL,
+      total_seats INT NOT NULL DEFAULT 120,
+      booked_seats JSON NULL,
+      ticket_price DECIMAL(10,2) NOT NULL DEFAULT 240,
+      status ENUM('draft','upcoming','booking_open','now_showing','house_full','ended','cancelled','active','inactive','hidden') NOT NULL DEFAULT 'draft',
+      genre VARCHAR(255) NOT NULL,
+      cast TEXT NULL,
+      director VARCHAR(255) NULL,
+      release_date VARCHAR(80) NOT NULL,
+      rating VARCHAR(80) NULL,
+      hero VARCHAR(255) NULL,
+      certificate VARCHAR(80) NULL,
+      format VARCHAR(120) NOT NULL DEFAULT '2D',
+      trailer_url TEXT NULL,
+      trailer_file_url TEXT NULL,
+      gallery_images JSON NULL,
+      documents JSON NULL,
+      interest_count VARCHAR(120) NULL,
+      about_movie TEXT NULL,
+      screen_name VARCHAR(120) NULL,
+      city VARCHAR(150) NULL,
+      location TEXT NULL,
+      end_time VARCHAR(80) NULL,
+      seat_layout JSON NULL,
+      regular_seat_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+      premium_seat_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+      vip_seat_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+      average_rating DECIMAL(3,2) NOT NULL DEFAULT 0,
+      total_reviews INT NOT NULL DEFAULT 0,
+      rating_distribution JSON NULL,
+      is_offer_applicable BOOLEAN NOT NULL DEFAULT FALSE,
+      offers JSON NULL,
+      cast_members JSON NULL,
+      crew_members JSON NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_movies_vendor_id (vendor_id),
+      INDEX idx_movies_status (status)
+    )
+  `);
+
+  const [columns] = await connection.query("SHOW COLUMNS FROM movies");
+  const columnMap = new Map(columns.map((column) => [column.Field, column]));
+
+  await ensureColumn(connection, "movies", columnMap, "vendor_id", "VARCHAR(24) NULL");
+  await ensureColumn(connection, "movies", columnMap, "vendor", "VARCHAR(24) NULL");
+  await ensureColumn(connection, "movies", columnMap, "poster_url", "TEXT NULL");
+  await ensureColumn(connection, "movies", columnMap, "banner_url", "TEXT NULL");
+  await ensureColumn(connection, "movies", columnMap, "theatre_name", "VARCHAR(255) NULL");
+  await ensureColumn(connection, "movies", columnMap, "theatre_city", "VARCHAR(255) NULL");
+  await ensureColumn(connection, "movies", columnMap, "theatre_address", "TEXT NULL");
+  await ensureColumn(connection, "movies", columnMap, "screen_number", "VARCHAR(80) NULL");
+  await ensureColumn(connection, "movies", columnMap, "show_date", "VARCHAR(80) NULL");
+  await ensureColumn(connection, "movies", columnMap, "show_time", "VARCHAR(80) NULL");
+  await ensureColumn(connection, "movies", columnMap, "show_times", "JSON NULL");
+  await ensureColumn(connection, "movies", columnMap, "total_seats", "INT NOT NULL DEFAULT 120");
+  await ensureColumn(connection, "movies", columnMap, "booked_seats", "JSON NULL");
+  await ensureColumn(connection, "movies", columnMap, "ticket_price", "DECIMAL(10,2) NOT NULL DEFAULT 240");
+  await connection.query(`ALTER TABLE movies MODIFY status ${movieStatusDefinition}`);
+  await ensureColumn(connection, "movies", columnMap, "trailer_url", "TEXT NULL");
+  await ensureColumn(connection, "movies", columnMap, "trailer_file_url", "TEXT NULL");
+  await ensureColumn(connection, "movies", columnMap, "gallery_images", "JSON NULL");
+  await ensureColumn(connection, "movies", columnMap, "documents", "JSON NULL");
+  await ensureColumn(connection, "movies", columnMap, "interest_count", "VARCHAR(120) NULL");
+  await ensureColumn(connection, "movies", columnMap, "about_movie", "TEXT NULL");
+  await ensureColumn(connection, "movies", columnMap, "screen_name", "VARCHAR(120) NULL");
+  await ensureColumn(connection, "movies", columnMap, "city", "VARCHAR(150) NULL");
+  await ensureColumn(connection, "movies", columnMap, "location", "TEXT NULL");
+  await ensureColumn(connection, "movies", columnMap, "end_time", "VARCHAR(80) NULL");
+  await ensureColumn(connection, "movies", columnMap, "seat_layout", "JSON NULL");
+  await ensureColumn(connection, "movies", columnMap, "regular_seat_price", "DECIMAL(10,2) NOT NULL DEFAULT 0");
+  await ensureColumn(connection, "movies", columnMap, "premium_seat_price", "DECIMAL(10,2) NOT NULL DEFAULT 0");
+  await ensureColumn(connection, "movies", columnMap, "vip_seat_price", "DECIMAL(10,2) NOT NULL DEFAULT 0");
+  await ensureColumn(connection, "movies", columnMap, "average_rating", "DECIMAL(3,2) NOT NULL DEFAULT 0");
+  await ensureColumn(connection, "movies", columnMap, "total_reviews", "INT NOT NULL DEFAULT 0");
+  await ensureColumn(connection, "movies", columnMap, "rating_distribution", "JSON NULL");
+  await ensureColumn(connection, "movies", columnMap, "is_offer_applicable", "BOOLEAN NOT NULL DEFAULT FALSE");
+  await ensureColumn(connection, "movies", columnMap, "offers", "JSON NULL");
+  await ensureColumn(connection, "movies", columnMap, "cast_members", "JSON NULL");
+  await ensureColumn(connection, "movies", columnMap, "crew_members", "JSON NULL");
+  await ensureColumn(connection, "movies", columnMap, "created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
+  await ensureColumn(connection, "movies", columnMap, "updated_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+};
+
+const migrateMovieRecords = async (connection) => {
+  const [rows] = await connection.query("SELECT id, data, created_at, updated_at FROM app_records WHERE model = 'Movie'");
+  for (const row of rows) {
+    const movie = typeof row.data === "string" ? JSON.parse(row.data) : row.data;
+    const title = String(movie.title || "").trim();
+    const language = String(movie.language || "").trim();
+    const duration = String(movie.duration || "").trim();
+    const image = String(movie.image || "").trim();
+    const theatre = String(movie.theatre || "").trim();
+    const genre = String(movie.genre || "").trim();
+    const releaseDate = String(movie.releaseDate || movie.release_date || "").trim();
+
+    if (!title || !language || !duration || !image || !theatre || !genre || !releaseDate) continue;
+
+    await connection.query(
+      `INSERT IGNORE INTO movies (
+        id, vendor_id, vendor, title, language, duration, image, poster_url, banner_url,
+        description, theatre, theatre_name, theatre_city, theatre_address, screen_number,
+        show_date, show_time, show_times, total_seats, booked_seats, ticket_price, status,
+        genre, cast, director, release_date, rating, hero, certificate, format, trailer_url,
+        interest_count, about_movie, is_offer_applicable, offers, cast_members, crew_members,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        movie._id || row.id,
+        movie.vendorId || movie.vendor || null,
+        movie.vendor || movie.vendorId || null,
+        title,
+        language,
+        duration,
+        image,
+        movie.posterUrl || null,
+        movie.bannerUrl || null,
+        movie.description || "",
+        theatre,
+        movie.theatreName || null,
+        movie.theatreCity || null,
+        movie.theatreAddress || null,
+        movie.screenNumber || null,
+        movie.showDate || null,
+        movie.showTime || null,
+        JSON.stringify(movie.showTimes || []),
+        Number(movie.totalSeats || 120),
+        JSON.stringify(movie.bookedSeats || []),
+        Number(movie.ticketPrice || 240),
+        movie.status || "active",
+        genre,
+        movie.cast || "",
+        movie.director || "",
+        releaseDate,
+        movie.rating || "",
+        movie.hero || "",
+        movie.certificate || "",
+        movie.format || "2D",
+        movie.trailerUrl || "",
+        movie.interestCount || "",
+        movie.aboutMovie || "",
+        Boolean(movie.isOfferApplicable),
+        JSON.stringify(movie.offers || []),
+        JSON.stringify(movie.castMembers || []),
+        JSON.stringify(movie.crewMembers || []),
+        movie.createdAt || row.created_at,
+        movie.updatedAt || row.updated_at,
+      ]
+    );
+  }
+};
+
+const ensureFlightsSchema = async (connection) => {
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS flights (
+      id VARCHAR(24) NOT NULL PRIMARY KEY,
+      vendor_id VARCHAR(24) NULL,
+      airline_name VARCHAR(255) NOT NULL,
+      airline_logo TEXT NULL,
+      flight_number VARCHAR(80) NOT NULL,
+      flight_type VARCHAR(80) NOT NULL DEFAULT 'domestic',
+      from_city VARCHAR(150) NOT NULL,
+      from_airport VARCHAR(255) NOT NULL,
+      from_code VARCHAR(20) NOT NULL,
+      to_city VARCHAR(150) NOT NULL,
+      to_airport VARCHAR(255) NOT NULL,
+      to_code VARCHAR(20) NOT NULL,
+      departure_date VARCHAR(80) NOT NULL,
+      departure_time VARCHAR(80) NOT NULL,
+      arrival_date VARCHAR(80) NULL,
+      arrival_time VARCHAR(80) NOT NULL,
+      duration VARCHAR(80) NOT NULL,
+      aircraft VARCHAR(120) NOT NULL DEFAULT 'A320',
+      class_type VARCHAR(120) NOT NULL DEFAULT 'Economy',
+      total_seats INT NOT NULL DEFAULT 0,
+      available_seats INT NOT NULL DEFAULT 0,
+      booked_seats INT NOT NULL DEFAULT 0,
+      blocked_seats INT NOT NULL DEFAULT 0,
+      base_fare DECIMAL(10,2) NOT NULL DEFAULT 0,
+      taxes DECIMAL(10,2) NOT NULL DEFAULT 0,
+      total_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+      cabin_baggage VARCHAR(255) NULL,
+      checkin_baggage VARCHAR(255) NULL,
+      refundable BOOLEAN NOT NULL DEFAULT FALSE,
+      meal_included BOOLEAN NOT NULL DEFAULT FALSE,
+      status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+      seats JSON NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_flights_vendor_id (vendor_id),
+      INDEX idx_flights_status (status),
+      INDEX idx_flights_route (from_code, to_code)
+    )
+  `);
+
+  const [columns] = await connection.query("SHOW COLUMNS FROM flights");
+  const columnMap = new Map(columns.map((column) => [column.Field, column]));
+  await ensureColumn(connection, "flights", columnMap, "vendor_id", "VARCHAR(24) NULL");
+  await ensureColumn(connection, "flights", columnMap, "airline_logo", "TEXT NULL");
+  await ensureColumn(connection, "flights", columnMap, "booked_seats", "INT NOT NULL DEFAULT 0");
+  await ensureColumn(connection, "flights", columnMap, "blocked_seats", "INT NOT NULL DEFAULT 0");
+  await ensureColumn(connection, "flights", columnMap, "seats", "JSON NULL");
+};
+
+const ensureBookingsSchema = async (connection) => {
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS bookings (
+      id VARCHAR(24) NOT NULL PRIMARY KEY,
+      booking_code VARCHAR(80) NOT NULL UNIQUE,
+      user_id VARCHAR(24) NOT NULL,
+      vendor_id VARCHAR(24) NULL,
+      module VARCHAR(80) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      movie_id VARCHAR(24) NULL,
+      show_id VARCHAR(24) NULL,
+      flight_id VARCHAR(24) NULL,
+      customer_name VARCHAR(150) NULL,
+      customer_email VARCHAR(190) NULL,
+      customer_mobile VARCHAR(30) NULL,
+      theatre VARCHAR(255) NULL,
+      show_date VARCHAR(120) NULL,
+      show_time VARCHAR(120) NULL,
+      seats JSON NULL,
+      amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+      status ENUM('pending', 'confirmed', 'completed', 'cancelled', 'refunded') NOT NULL DEFAULT 'confirmed',
+      payment_status ENUM('pending', 'paid', 'failed', 'refunded') NOT NULL DEFAULT 'paid',
+      details JSON NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_bookings_user_id (user_id),
+      INDEX idx_bookings_vendor_id (vendor_id),
+      INDEX idx_bookings_module (module)
+    )
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS flight_bookings (
+      id VARCHAR(24) NOT NULL PRIMARY KEY,
+      booking_id VARCHAR(24) NULL,
+      booking_code VARCHAR(80) NOT NULL,
+      user_id VARCHAR(24) NOT NULL,
+      flight_id VARCHAR(24) NOT NULL,
+      passenger_name VARCHAR(150) NOT NULL,
+      passenger_mobile VARCHAR(30) NOT NULL,
+      passenger_email VARCHAR(190) NOT NULL,
+      seat_number VARCHAR(120) NOT NULL,
+      class_type VARCHAR(120) NOT NULL,
+      total_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+      booking_status ENUM('pending', 'confirmed', 'completed', 'cancelled', 'refunded') NOT NULL DEFAULT 'confirmed',
+      payment_status ENUM('pending', 'paid', 'failed', 'refunded') NOT NULL DEFAULT 'paid',
+      booking_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      details JSON NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_flight_bookings_user_id (user_id),
+      INDEX idx_flight_bookings_flight_id (flight_id)
+    )
+  `);
+};
+
+const ensureMovieSeatsSchema = async (connection) => {
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS movie_seats (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      row_name VARCHAR(10) NOT NULL,
+      seat_number VARCHAR(10) NOT NULL,
+      seat_no VARCHAR(20) NOT NULL,
+      show_id VARCHAR(255) NOT NULL,
+      movie_id VARCHAR(24) NULL,
+      theatre_id VARCHAR(255) NULL,
+      screen_id VARCHAR(255) NULL,
+      seat_type VARCHAR(40) NOT NULL DEFAULT 'prime',
+      price DECIMAL(10,2) NOT NULL DEFAULT 0,
+      status ENUM('available', 'booked', 'blocked') NOT NULL DEFAULT 'available',
+      booked_by VARCHAR(24) NULL,
+      booking_id VARCHAR(24) NULL,
+      customer_name VARCHAR(150) NULL,
+      customer_email VARCHAR(190) NULL,
+      customer_mobile VARCHAR(30) NULL,
+      amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+      payment_status VARCHAR(40) NULL,
+      booking_status VARCHAR(40) NULL,
+      booking_date DATETIME NULL,
+      blocked_by VARCHAR(24) NULL,
+      blocked_reason VARCHAR(255) NULL,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_movie_show_seat (show_id, seat_no),
+      INDEX idx_movie_seats_show_id (show_id),
+      INDEX idx_movie_seats_movie_id (movie_id),
+      INDEX idx_movie_seats_status (status)
+    )
+  `);
+
+  const [columns] = await connection.query("SHOW COLUMNS FROM movie_seats");
+  const columnMap = new Map(columns.map((column) => [column.Field, column]));
+  await ensureColumn(connection, "movie_seats", columnMap, "row_name", "VARCHAR(10) NOT NULL DEFAULT 'A'");
+  await ensureColumn(connection, "movie_seats", columnMap, "seat_number", "VARCHAR(10) NOT NULL DEFAULT '01'");
+  await ensureColumn(connection, "movie_seats", columnMap, "seat_type", "VARCHAR(40) NOT NULL DEFAULT 'prime'");
+  await ensureColumn(connection, "movie_seats", columnMap, "price", "DECIMAL(10,2) NOT NULL DEFAULT 0");
+};
+
+const ensureMovieProductionSchema = async (connection) => {
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS theatres (
+      id VARCHAR(24) NOT NULL PRIMARY KEY,
+      vendor_id VARCHAR(24) NULL,
+      name VARCHAR(255) NOT NULL,
+      city VARCHAR(150) NULL,
+      location TEXT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'active',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_theatres_vendor_id (vendor_id)
+    )
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS screens (
+      id VARCHAR(24) NOT NULL PRIMARY KEY,
+      theatre_id VARCHAR(24) NULL,
+      vendor_id VARCHAR(24) NULL,
+      name VARCHAR(120) NOT NULL,
+      rows_count INT NOT NULL DEFAULT 10,
+      seats_per_row INT NOT NULL DEFAULT 12,
+      status VARCHAR(40) NOT NULL DEFAULT 'active',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_screens_vendor_id (vendor_id)
+    )
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS shows (
+      id VARCHAR(24) NOT NULL PRIMARY KEY,
+      movie_id VARCHAR(24) NULL,
+      theatre_id VARCHAR(24) NULL,
+      screen_id VARCHAR(24) NULL,
+      vendor_id VARCHAR(24) NULL,
+      show_date VARCHAR(80) NULL,
+      show_time VARCHAR(80) NULL,
+      end_time VARCHAR(80) NULL,
+      regular_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+      premium_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+      vip_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+      status VARCHAR(40) NOT NULL DEFAULT 'booking_open',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_shows_movie_id (movie_id),
+      INDEX idx_shows_vendor_id (vendor_id)
+    )
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS movie_reviews (
+      id VARCHAR(24) NOT NULL PRIMARY KEY,
+      movie_id VARCHAR(24) NOT NULL,
+      booking_id VARCHAR(24) NULL,
+      user_id VARCHAR(24) NULL,
+      vendor_id VARCHAR(24) NULL,
+      rating INT NOT NULL,
+      comment TEXT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'published',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_movie_reviews_movie_id (movie_id)
+    )
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS movie_documents (
+      id VARCHAR(24) NOT NULL PRIMARY KEY,
+      movie_id VARCHAR(24) NOT NULL,
+      vendor_id VARCHAR(24) NULL,
+      document_type VARCHAR(120) NOT NULL,
+      file_name VARCHAR(255) NULL,
+      file_url TEXT NOT NULL,
+      mime_type VARCHAR(120) NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_movie_documents_movie_id (movie_id)
+    )
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS movie_gallery (
+      id VARCHAR(24) NOT NULL PRIMARY KEY,
+      movie_id VARCHAR(24) NOT NULL,
+      vendor_id VARCHAR(24) NULL,
+      file_name VARCHAR(255) NULL,
+      file_url TEXT NOT NULL,
+      mime_type VARCHAR(120) NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_movie_gallery_movie_id (movie_id)
+    )
+  `);
+};
+
+const ready = (async () => {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.ping();
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS app_records (
+        id VARCHAR(24) NOT NULL,
+        model VARCHAR(80) NOT NULL,
+        data JSON NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (model, id),
+        INDEX idx_app_records_model (model)
+      )
+    `);
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(24) NOT NULL PRIMARY KEY,
+        name VARCHAR(150) NOT NULL,
+        email VARCHAR(190) NOT NULL UNIQUE,
+        mobile VARCHAR(30) NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role ENUM('admin', 'vendor', 'user') NOT NULL DEFAULT 'user',
+        status ENUM('active', 'blocked', 'pending') NOT NULL DEFAULT 'active',
+        image TEXT NULL,
+        reset_password_token VARCHAR(255) NULL,
+        reset_password_expires DATETIME NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    await ensureUsersSchema(connection);
+    await ensureMoviesSchema(connection);
+    await ensureFlightsSchema(connection);
+    await ensureBookingsSchema(connection);
+    await ensureMovieSeatsSchema(connection);
+    await ensureMovieProductionSchema(connection);
+    await migrateMovieRecords(connection);
+    console.log("MySQL Connected");
+    return true;
+  } catch (err) {
+    console.log("Database Error", err);
+    return false;
+  } finally {
+    if (connection) connection.release();
+  }
+})();
+
+module.exports = {
+  pool,
+  ready,
+};

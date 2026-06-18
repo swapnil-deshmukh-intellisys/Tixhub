@@ -1,0 +1,834 @@
+const { pool, ready } = require("../config/db");
+
+const registry = {};
+const memoryStore = {};
+let mysqlAvailable = true;
+
+const clone = (value) => {
+  if (value === undefined || value === null) return value;
+  if (value instanceof Date) return new Date(value);
+  if (Array.isArray(value)) return value.map(clone);
+  if (typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, clone(entry)]));
+  }
+  return value;
+};
+
+const getPath = (item, path) =>
+  String(path)
+    .split(".")
+    .reduce((current, key) => (current === undefined || current === null ? undefined : current[key]), item);
+
+const same = (left, right) => String(left) === String(right);
+
+const matchesOperator = (actual, expected) => {
+  if (expected && typeof expected === "object" && !Array.isArray(expected) && !(expected instanceof Date)) {
+    if (expected.$in) return expected.$in.some((value) => same(actual, value));
+    if (expected.$nin) return !expected.$nin.some((value) => same(actual, value));
+    if (expected.$gt !== undefined) return actual > expected.$gt;
+    if (expected.$lt !== undefined) return actual < expected.$lt;
+  }
+
+  if (Array.isArray(actual)) return actual.some((value) => same(value, expected));
+  return same(actual, expected);
+};
+
+const matchesQuery = (item, query = {}) =>
+  Object.entries(query || {}).every(([key, expected]) => {
+    if (key === "$or") return expected.some((entry) => matchesQuery(item, entry));
+    if (key === "$and") return expected.every((entry) => matchesQuery(item, entry));
+    return matchesOperator(getPath(item, key), expected);
+  });
+
+const applyUpdate = (target, update = {}) => {
+  Object.entries(update).forEach(([key, value]) => {
+    if (key === "$addToSet") {
+      Object.entries(value).forEach(([field, entry]) => {
+        const values = entry && entry.$each ? entry.$each : [entry];
+        target[field] = Array.isArray(target[field]) ? target[field] : [];
+        values.forEach((nextValue) => {
+          if (!target[field].some((current) => same(current, nextValue))) target[field].push(nextValue);
+        });
+      });
+      return;
+    }
+
+    target[key] = clone(value);
+  });
+};
+
+const userFromRow = (Model, row) =>
+  new Model({
+    _id: row.id,
+    name: row.name,
+    email: row.email,
+    mobile: row.mobile,
+    password: row.password,
+    role: row.role,
+    status: row.status,
+    image: row.image || "",
+    resetPasswordToken: row.reset_password_token || undefined,
+    resetPasswordExpires: row.reset_password_expires || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+
+const parseJson = (value, fallback) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (Array.isArray(value) || typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
+const movieFromRow = (Model, row) =>
+  new Model({
+    _id: row.id,
+    vendorId: row.vendor_id || undefined,
+    vendor: row.vendor || row.vendor_id || undefined,
+    title: row.title,
+    language: row.language,
+    duration: row.duration,
+    image: row.image,
+    posterUrl: row.poster_url || "",
+    bannerUrl: row.banner_url || "",
+    description: row.description || "",
+    theatre: row.theatre,
+    theatreName: row.theatre_name || "",
+    theatreCity: row.theatre_city || "",
+    theatreAddress: row.theatre_address || "",
+    screenNumber: row.screen_number || "",
+    showDate: row.show_date || "",
+    showTime: row.show_time || "",
+    showTimes: parseJson(row.show_times, []),
+    totalSeats: Number(row.total_seats || 120),
+    bookedSeats: parseJson(row.booked_seats, []),
+    ticketPrice: Number(row.ticket_price || 240),
+    status: row.status || "active",
+    genre: row.genre,
+    cast: row.cast || "",
+    director: row.director || "",
+    releaseDate: row.release_date,
+    rating: row.rating || "",
+    hero: row.hero || "",
+    certificate: row.certificate || "",
+    format: row.format || "2D",
+    trailerUrl: row.trailer_url || "",
+    trailerFileUrl: row.trailer_file_url || "",
+    galleryImages: parseJson(row.gallery_images, []),
+    documents: parseJson(row.documents, []),
+    interestCount: row.interest_count || "",
+    aboutMovie: row.about_movie || "",
+    screenName: row.screen_name || "",
+    city: row.city || row.theatre_city || "",
+    location: row.location || row.theatre_address || "",
+    endTime: row.end_time || "",
+    seatLayout: parseJson(row.seat_layout, []),
+    regularSeatPrice: Number(row.regular_seat_price || row.ticket_price || 0),
+    premiumSeatPrice: Number(row.premium_seat_price || 0),
+    vipSeatPrice: Number(row.vip_seat_price || 0),
+    averageRating: Number(row.average_rating || 0),
+    totalReviews: Number(row.total_reviews || 0),
+    ratingDistribution: parseJson(row.rating_distribution, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }),
+    isOfferApplicable: Boolean(row.is_offer_applicable),
+    offers: parseJson(row.offers, []),
+    castMembers: parseJson(row.cast_members, []),
+    crewMembers: parseJson(row.crew_members, []),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+
+const flightFromRow = (Model, row) =>
+  new Model({
+    _id: row.id,
+    vendorId: row.vendor_id || undefined,
+    vendor: row.vendor_id || undefined,
+    airlineName: row.airline_name,
+    airlineLogo: row.airline_logo || "",
+    flightNumber: row.flight_number,
+    flightType: row.flight_type || "domestic",
+    fromCity: row.from_city,
+    fromAirport: row.from_airport,
+    fromCode: row.from_code,
+    toCity: row.to_city,
+    toAirport: row.to_airport,
+    toCode: row.to_code,
+    departureDate: row.departure_date,
+    departureTime: row.departure_time,
+    arrivalDate: row.arrival_date || "",
+    arrivalTime: row.arrival_time,
+    duration: row.duration,
+    aircraft: row.aircraft || "A320",
+    aircraftType: row.aircraft || "A320",
+    classType: row.class_type || "Economy",
+    cabinClass: row.class_type || "Economy",
+    totalSeats: Number(row.total_seats || 0),
+    availableSeats: Number(row.available_seats || 0),
+    bookedSeats: Number(row.booked_seats || 0),
+    blockedSeats: Number(row.blocked_seats || 0),
+    baseFare: Number(row.base_fare || 0),
+    taxes: Number(row.taxes || 0),
+    totalPrice: Number(row.total_price || 0),
+    ticketPrice: Number(row.total_price || 0),
+    cabinBaggage: row.cabin_baggage || "",
+    cabin_baggage: row.cabin_baggage || "",
+    checkinBaggage: row.checkin_baggage || "",
+    baggageAllowance: [row.cabin_baggage, row.checkin_baggage].filter(Boolean).join(" + "),
+    refundable: Boolean(row.refundable),
+    mealIncluded: Boolean(row.meal_included),
+    status: row.status || "active",
+    seats: parseJson(row.seats, []),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+
+const bookingFromRow = (Model, row) =>
+  new Model({
+    _id: row.id,
+    bookingCode: row.booking_code,
+    user: row.user_id,
+    vendor: row.vendor_id || undefined,
+    vendorId: row.vendor_id || undefined,
+    module: row.module,
+    title: row.title,
+    movieId: row.movie_id || undefined,
+    showId: row.show_id || undefined,
+    flightId: row.flight_id || undefined,
+    customerName: row.customer_name || "",
+    customerEmail: row.customer_email || "",
+    customerMobile: row.customer_mobile || "",
+    theatre: row.theatre || "",
+    showDate: row.show_date || "",
+    showTime: row.show_time || "",
+    seats: parseJson(row.seats, []),
+    amount: Number(row.amount || 0),
+    status: row.status || "confirmed",
+    paymentStatus: row.payment_status || "paid",
+    details: parseJson(row.details, {}),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+
+const populate = async (result, path) => {
+  const rows = Array.isArray(result) ? result : [result];
+  if (path !== "user" || !registry.User) return;
+
+  const users = await registry.User.readAll();
+  rows.filter(Boolean).forEach((row) => {
+    if (!row.user || typeof row.user === "object") return;
+    const user = users.find((item) => same(item._id, row.user));
+    if (user) row.user = user;
+  });
+};
+
+class Query {
+  constructor(executor) {
+    this.executor = executor;
+    this.sortSpec = null;
+    this.populatePath = null;
+  }
+
+  sort(spec) {
+    this.sortSpec = spec;
+    return this;
+  }
+
+  select() {
+    return this;
+  }
+
+  populate(path) {
+    this.populatePath = path;
+    return this;
+  }
+
+  async exec() {
+    const result = await this.executor();
+    const values = Array.isArray(result) ? [...result] : result;
+
+    if (Array.isArray(values) && this.sortSpec) {
+      const [[field, direction]] = Object.entries(this.sortSpec);
+      values.sort((left, right) => {
+        const leftValue = getPath(left, field);
+        const rightValue = getPath(right, field);
+        if (leftValue === rightValue) return 0;
+        return leftValue > rightValue ? direction : -direction;
+      });
+    }
+
+    if (this.populatePath) await populate(values, this.populatePath);
+    return values;
+  }
+
+  then(resolve, reject) {
+    return this.exec().then(resolve, reject);
+  }
+
+  catch(reject) {
+    return this.exec().catch(reject);
+  }
+}
+
+const createInMemoryModel = (name, defaults = {}, seed = []) => {
+  class InMemoryDocument {
+    constructor(data = {}) {
+      Object.assign(this, clone(defaults), clone(data));
+      this._id = this._id || InMemoryDocument.newId();
+      this.createdAt = this.createdAt || new Date();
+      this.updatedAt = this.updatedAt || new Date();
+    }
+
+    static newId() {
+      return `${Date.now().toString(16)}${Math.random().toString(16).slice(2, 14)}`.slice(0, 24);
+    }
+
+    static get _items() {
+      if (!memoryStore[name]) memoryStore[name] = [];
+      return memoryStore[name];
+    }
+
+    static async readAll() {
+      const requiresMysql = ["User", "Movie", "Flight", "Booking"].includes(name);
+      if (!mysqlAvailable && !requiresMysql) return this._items;
+
+      try {
+        mysqlAvailable = await ready;
+        if (!mysqlAvailable) {
+          if (requiresMysql) throw new Error("MySQL connection is not available");
+          return this._items;
+        }
+        if (name === "User") {
+          const [rows] = await pool.query("SELECT * FROM users ORDER BY created_at DESC");
+          return rows.map((row) => userFromRow(this, row));
+        }
+        if (name === "Movie") {
+          const [rows] = await pool.query("SELECT * FROM movies ORDER BY created_at DESC");
+          return rows.map((row) => movieFromRow(this, row));
+        }
+        if (name === "Flight") {
+          const [rows] = await pool.query("SELECT * FROM flights ORDER BY created_at DESC");
+          return rows.map((row) => flightFromRow(this, row));
+        }
+        if (name === "Booking") {
+          const [rows] = await pool.query("SELECT * FROM bookings ORDER BY created_at DESC");
+          return rows.map((row) => bookingFromRow(this, row));
+        }
+        const [rows] = await pool.query("SELECT data FROM app_records WHERE model = ?", [name]);
+        return rows.map((row) => new this(typeof row.data === "string" ? JSON.parse(row.data) : row.data));
+      } catch (error) {
+        mysqlAvailable = false;
+        if (requiresMysql) throw error;
+        console.log(`MySQL unavailable for ${name}; using memory fallback`, error.message);
+        return this._items;
+      }
+    }
+
+    static async write(document) {
+      const requiresMysql = ["User", "Movie", "Flight", "Booking"].includes(name);
+      if (!mysqlAvailable && !requiresMysql) return document;
+
+      try {
+        mysqlAvailable = await ready;
+        if (!mysqlAvailable) {
+          if (requiresMysql) throw new Error("MySQL connection is not available");
+          return document;
+        }
+        if (name === "User") {
+          await pool.query(
+            `INSERT INTO users (
+              id, name, email, mobile, password, role, status, image,
+              reset_password_token, reset_password_expires, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+              name = VALUES(name),
+              email = VALUES(email),
+              mobile = VALUES(mobile),
+              password = VALUES(password),
+              role = VALUES(role),
+              status = VALUES(status),
+              image = VALUES(image),
+              reset_password_token = VALUES(reset_password_token),
+              reset_password_expires = VALUES(reset_password_expires),
+              updated_at = VALUES(updated_at)`,
+            [
+              document._id,
+              document.name || "",
+              document.email || "",
+              document.mobile || "",
+              document.password || "",
+              document.role || "user",
+              document.status || "active",
+              document.image || "",
+              document.resetPasswordToken || null,
+              document.resetPasswordExpires || null,
+              document.createdAt,
+              document.updatedAt,
+            ]
+          );
+          return document;
+        }
+        if (name === "Movie") {
+          await pool.query(
+            `INSERT INTO movies (
+              id, vendor_id, vendor, title, language, duration, image, poster_url, banner_url,
+              description, theatre, theatre_name, theatre_city, theatre_address, screen_number,
+              show_date, show_time, show_times, total_seats, booked_seats, ticket_price, status,
+              genre, cast, director, release_date, rating, hero, certificate, format, trailer_url,
+              trailer_file_url, gallery_images, documents, interest_count, about_movie, screen_name,
+              city, location, end_time, seat_layout, regular_seat_price, premium_seat_price,
+              vip_seat_price, average_rating, total_reviews, rating_distribution,
+              is_offer_applicable, offers, cast_members, crew_members,
+              created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+              vendor_id = VALUES(vendor_id),
+              vendor = VALUES(vendor),
+              title = VALUES(title),
+              language = VALUES(language),
+              duration = VALUES(duration),
+              image = VALUES(image),
+              poster_url = VALUES(poster_url),
+              banner_url = VALUES(banner_url),
+              description = VALUES(description),
+              theatre = VALUES(theatre),
+              theatre_name = VALUES(theatre_name),
+              theatre_city = VALUES(theatre_city),
+              theatre_address = VALUES(theatre_address),
+              screen_number = VALUES(screen_number),
+              show_date = VALUES(show_date),
+              show_time = VALUES(show_time),
+              show_times = VALUES(show_times),
+              total_seats = VALUES(total_seats),
+              booked_seats = VALUES(booked_seats),
+              ticket_price = VALUES(ticket_price),
+              status = VALUES(status),
+              genre = VALUES(genre),
+              cast = VALUES(cast),
+              director = VALUES(director),
+              release_date = VALUES(release_date),
+              rating = VALUES(rating),
+              hero = VALUES(hero),
+              certificate = VALUES(certificate),
+              format = VALUES(format),
+              trailer_url = VALUES(trailer_url),
+              trailer_file_url = VALUES(trailer_file_url),
+              gallery_images = VALUES(gallery_images),
+              documents = VALUES(documents),
+              interest_count = VALUES(interest_count),
+              about_movie = VALUES(about_movie),
+              screen_name = VALUES(screen_name),
+              city = VALUES(city),
+              location = VALUES(location),
+              end_time = VALUES(end_time),
+              seat_layout = VALUES(seat_layout),
+              regular_seat_price = VALUES(regular_seat_price),
+              premium_seat_price = VALUES(premium_seat_price),
+              vip_seat_price = VALUES(vip_seat_price),
+              average_rating = VALUES(average_rating),
+              total_reviews = VALUES(total_reviews),
+              rating_distribution = VALUES(rating_distribution),
+              is_offer_applicable = VALUES(is_offer_applicable),
+              offers = VALUES(offers),
+              cast_members = VALUES(cast_members),
+              crew_members = VALUES(crew_members),
+              updated_at = VALUES(updated_at)`,
+            [
+              document._id,
+              document.vendorId || document.vendor || null,
+              document.vendor || document.vendorId || null,
+              document.title || "",
+              document.language || "",
+              document.duration || "",
+              document.image || "",
+              document.posterUrl || "",
+              document.bannerUrl || "",
+              document.description || "",
+              document.theatre || "",
+              document.theatreName || "",
+              document.theatreCity || "",
+              document.theatreAddress || "",
+              document.screenNumber || "",
+              document.showDate || "",
+              document.showTime || "",
+              JSON.stringify(document.showTimes || []),
+              Number(document.totalSeats || 120),
+              JSON.stringify(document.bookedSeats || []),
+              Number(document.ticketPrice || 240),
+              document.status || "active",
+              document.genre || "",
+              document.cast || "",
+              document.director || "",
+              document.releaseDate || "",
+              document.rating || "",
+              document.hero || "",
+              document.certificate || "",
+              document.format || "2D",
+              document.trailerUrl || "",
+              document.trailerFileUrl || "",
+              JSON.stringify(document.galleryImages || []),
+              JSON.stringify(document.documents || []),
+              document.interestCount || "",
+              document.aboutMovie || "",
+              document.screenName || document.screenNumber || "",
+              document.city || document.theatreCity || "",
+              document.location || document.theatreAddress || "",
+              document.endTime || "",
+              JSON.stringify(document.seatLayout || []),
+              Number(document.regularSeatPrice || document.ticketPrice || 0),
+              Number(document.premiumSeatPrice || 0),
+              Number(document.vipSeatPrice || 0),
+              Number(document.averageRating || 0),
+              Number(document.totalReviews || 0),
+              JSON.stringify(document.ratingDistribution || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }),
+              Boolean(document.isOfferApplicable),
+              JSON.stringify(document.offers || []),
+              JSON.stringify(document.castMembers || []),
+              JSON.stringify(document.crewMembers || []),
+              document.createdAt,
+              document.updatedAt,
+            ]
+          );
+          return document;
+        }
+        if (name === "Flight") {
+          const totalPrice = Number(document.totalPrice ?? document.ticketPrice ?? document.price ?? 0);
+          const baseFare = Number(document.baseFare || 0);
+          const taxes = Number(document.taxes || 0);
+          const totalSeats = Number(document.totalSeats || 0);
+          const bookedSeats = Number(document.bookedSeats || 0);
+          const blockedSeats = Number(document.blockedSeats || 0);
+          const availableSeats = Number(document.availableSeats ?? Math.max(totalSeats - bookedSeats - blockedSeats, 0));
+
+          await pool.query(
+            `INSERT INTO flights (
+              id, vendor_id, airline_name, airline_logo, flight_number, flight_type,
+              from_city, from_airport, from_code, to_city, to_airport, to_code,
+              departure_date, departure_time, arrival_date, arrival_time, duration,
+              aircraft, class_type, total_seats, available_seats, booked_seats, blocked_seats,
+              base_fare, taxes, total_price, cabin_baggage, checkin_baggage,
+              refundable, meal_included, status, seats, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+              vendor_id = VALUES(vendor_id),
+              airline_name = VALUES(airline_name),
+              airline_logo = VALUES(airline_logo),
+              flight_number = VALUES(flight_number),
+              flight_type = VALUES(flight_type),
+              from_city = VALUES(from_city),
+              from_airport = VALUES(from_airport),
+              from_code = VALUES(from_code),
+              to_city = VALUES(to_city),
+              to_airport = VALUES(to_airport),
+              to_code = VALUES(to_code),
+              departure_date = VALUES(departure_date),
+              departure_time = VALUES(departure_time),
+              arrival_date = VALUES(arrival_date),
+              arrival_time = VALUES(arrival_time),
+              duration = VALUES(duration),
+              aircraft = VALUES(aircraft),
+              class_type = VALUES(class_type),
+              total_seats = VALUES(total_seats),
+              available_seats = VALUES(available_seats),
+              booked_seats = VALUES(booked_seats),
+              blocked_seats = VALUES(blocked_seats),
+              base_fare = VALUES(base_fare),
+              taxes = VALUES(taxes),
+              total_price = VALUES(total_price),
+              cabin_baggage = VALUES(cabin_baggage),
+              checkin_baggage = VALUES(checkin_baggage),
+              refundable = VALUES(refundable),
+              meal_included = VALUES(meal_included),
+              status = VALUES(status),
+              seats = VALUES(seats),
+              updated_at = VALUES(updated_at)`,
+            [
+              document._id,
+              document.vendorId || document.vendor || null,
+              document.airlineName || document.airline || "",
+              document.airlineLogo || document.airlineLogoUrl || "",
+              document.flightNumber || "",
+              document.flightType || "domestic",
+              document.fromCity || document.from || "",
+              document.fromAirport || "",
+              document.fromCode || "",
+              document.toCity || document.to || "",
+              document.toAirport || "",
+              document.toCode || "",
+              document.departureDate || "",
+              document.departureTime || "",
+              document.arrivalDate || "",
+              document.arrivalTime || "",
+              document.duration || "",
+              document.aircraft || document.aircraftType || "A320",
+              document.classType || document.cabinClass || "Economy",
+              totalSeats,
+              availableSeats,
+              bookedSeats,
+              blockedSeats,
+              baseFare,
+              taxes,
+              totalPrice,
+              document.cabinBaggage || document.cabin_baggage || document.cabinBaggageInfo || "",
+              document.checkinBaggage || document.checkin_baggage || document.baggageAllowance || "",
+              Boolean(document.refundable),
+              Boolean(document.mealIncluded),
+              document.status || "active",
+              JSON.stringify(document.seats || []),
+              document.createdAt,
+              document.updatedAt,
+            ]
+          );
+          return document;
+        }
+        if (name === "Booking") {
+          const details = document.details || {};
+          const flightId = document.flightId || details.flightId || details.flight?._id || details.flight?.id || null;
+          const bookingCode = document.bookingCode || `TH${Date.now().toString(36).toUpperCase()}`;
+
+          document.bookingCode = bookingCode;
+
+          await pool.query(
+            `INSERT INTO bookings (
+              id, booking_code, user_id, vendor_id, module, title, movie_id, show_id, flight_id,
+              customer_name, customer_email, customer_mobile, theatre, show_date, show_time,
+              seats, amount, status, payment_status, details, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+              vendor_id = VALUES(vendor_id),
+              title = VALUES(title),
+              movie_id = VALUES(movie_id),
+              show_id = VALUES(show_id),
+              flight_id = VALUES(flight_id),
+              customer_name = VALUES(customer_name),
+              customer_email = VALUES(customer_email),
+              customer_mobile = VALUES(customer_mobile),
+              theatre = VALUES(theatre),
+              show_date = VALUES(show_date),
+              show_time = VALUES(show_time),
+              seats = VALUES(seats),
+              amount = VALUES(amount),
+              status = VALUES(status),
+              payment_status = VALUES(payment_status),
+              details = VALUES(details),
+              updated_at = VALUES(updated_at)`,
+            [
+              document._id,
+              bookingCode,
+              document.user,
+              document.vendorId || document.vendor || null,
+              document.module || "",
+              document.title || "",
+              document.movieId || details.movieId || null,
+              document.showId || details.showId || null,
+              flightId,
+              document.customerName || details.customerName || details.passenger?.name || "",
+              document.customerEmail || details.customerEmail || details.passenger?.email || "",
+              document.customerMobile || details.customerMobile || details.passenger?.mobile || "",
+              details.theatre?.name || details.theatre || document.theatre || "",
+              details.showDate || document.showDate || "",
+              details.showTime || document.showTime || "",
+              JSON.stringify(document.seats || []),
+              Number(document.amount || 0),
+              document.status || "confirmed",
+              document.paymentStatus || "paid",
+              JSON.stringify(details),
+              document.createdAt,
+              document.updatedAt,
+            ]
+          );
+
+          if (document.module === "flight" && flightId) {
+            const passenger = details.passenger || {};
+            await pool.query(
+              `INSERT INTO flight_bookings (
+                id, booking_id, booking_code, user_id, flight_id, passenger_name,
+                passenger_mobile, passenger_email, seat_number, class_type, total_amount,
+                booking_status, payment_status, booking_date, details, created_at, updated_at
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON DUPLICATE KEY UPDATE
+                passenger_name = VALUES(passenger_name),
+                passenger_mobile = VALUES(passenger_mobile),
+                passenger_email = VALUES(passenger_email),
+                seat_number = VALUES(seat_number),
+                class_type = VALUES(class_type),
+                total_amount = VALUES(total_amount),
+                booking_status = VALUES(booking_status),
+                payment_status = VALUES(payment_status),
+                details = VALUES(details),
+                updated_at = VALUES(updated_at)`,
+              [
+                document._id,
+                document._id,
+                bookingCode,
+                document.user,
+                flightId,
+                passenger.name || document.customerName || "",
+                passenger.mobile || document.customerMobile || "",
+                passenger.email || document.customerEmail || "",
+                (document.seats || details.seats || []).join(", "),
+                document.classType || details.cabinClass || details.classType || "Economy",
+                Number(document.amount || 0),
+                document.status || "confirmed",
+                document.paymentStatus || "paid",
+                document.createdAt,
+                JSON.stringify(details),
+                document.createdAt,
+                document.updatedAt,
+              ]
+            );
+          }
+
+          return document;
+        }
+        await pool.query(
+          `INSERT INTO app_records (id, model, data, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE data = VALUES(data), updated_at = VALUES(updated_at)`,
+          [
+            document._id,
+            name,
+            JSON.stringify(document.toObject()),
+            document.createdAt,
+            document.updatedAt,
+          ]
+        );
+      } catch (error) {
+        mysqlAvailable = false;
+        if (requiresMysql) throw error;
+        console.log(`MySQL write failed for ${name}; using memory fallback`, error.message);
+      }
+
+      return document;
+    }
+
+    static async remove(query = {}) {
+      const rows = await this.readAll();
+      const removed = rows.filter((item) => matchesQuery(item, query));
+
+      if (mysqlAvailable && removed.length) {
+        mysqlAvailable = await ready;
+        if (mysqlAvailable) {
+          if (name === "User") {
+            await pool.query(`DELETE FROM users WHERE id IN (${removed.map(() => "?").join(",")})`, removed.map((item) => item._id));
+          } else if (name === "Movie") {
+            await pool.query(`DELETE FROM movies WHERE id IN (${removed.map(() => "?").join(",")})`, removed.map((item) => item._id));
+          } else if (name === "Flight") {
+            await pool.query(`DELETE FROM flights WHERE id IN (${removed.map(() => "?").join(",")})`, removed.map((item) => item._id));
+          } else if (name === "Booking") {
+            const ids = removed.map((item) => item._id);
+            await pool.query(`DELETE FROM flight_bookings WHERE booking_id IN (${removed.map(() => "?").join(",")})`, ids);
+            await pool.query(`DELETE FROM bookings WHERE id IN (${removed.map(() => "?").join(",")})`, ids);
+          } else {
+            await pool.query(
+              `DELETE FROM app_records WHERE model = ? AND id IN (${removed.map(() => "?").join(",")})`,
+              [name, ...removed.map((item) => item._id)]
+            );
+          }
+        }
+      } else if (["User", "Movie", "Flight", "Booking"].includes(name) && removed.length) {
+        throw new Error("MySQL connection is not available");
+      }
+
+      return removed;
+    }
+
+    static find(query = {}) {
+      return new Query(async () => (await this.readAll()).filter((item) => matchesQuery(item, query)));
+    }
+
+    static findOne(query = {}) {
+      return new Query(async () => (await this.readAll()).find((item) => matchesQuery(item, query)) || null);
+    }
+
+    static findById(id) {
+      return this.findOne({ _id: id });
+    }
+
+    static async create(data) {
+      const document = new this(data);
+      await document.save();
+      return document;
+    }
+
+    static findOneAndUpdate(query, update, options = {}) {
+      return new Query(async () => {
+        let document = (await this.readAll()).find((item) => matchesQuery(item, query));
+        if (!document && options.upsert) {
+          document = new this({ ...query });
+        }
+        if (!document) return null;
+        applyUpdate(document, update);
+        document.updatedAt = new Date();
+        await document.save();
+        return document;
+      });
+    }
+
+    static findByIdAndUpdate(id, update, options = {}) {
+      return this.findOneAndUpdate({ _id: id }, update, options);
+    }
+
+    static findOneAndDelete(query) {
+      return new Query(async () => {
+        const [removed] = await this.remove(query);
+        if (!removed) return null;
+        memoryStore[name] = this._items.filter((item) => !same(item._id, removed._id));
+        return removed;
+      });
+    }
+
+    static findByIdAndDelete(id) {
+      return this.findOneAndDelete({ _id: id });
+    }
+
+    static async deleteMany(query = {}) {
+      const removed = await this.remove(query);
+      memoryStore[name] = this._items.filter((item) => !matchesQuery(item, query));
+      return { deletedCount: removed.length };
+    }
+
+    static async countDocuments(query = {}) {
+      return (await this.readAll()).filter((item) => matchesQuery(item, query)).length;
+    }
+
+    static async aggregate(pipeline = []) {
+      const group = pipeline.find((stage) => stage.$group)?.$group;
+      if (!group?.total?.$sum) return [];
+      const field = String(group.total.$sum).replace(/^\$/, "");
+      const rows = await this.readAll();
+      return [{ _id: group._id || null, total: rows.reduce((sum, item) => sum + Number(getPath(item, field) || 0), 0) }];
+    }
+
+    markModified() {}
+
+    toObject() {
+      return clone(this);
+    }
+
+    async save() {
+      const existingIndex = this.constructor._items.findIndex((item) => same(item._id, this._id));
+      this.updatedAt = new Date();
+      if (existingIndex >= 0) {
+        this.constructor._items[existingIndex] = this;
+      } else {
+        this.constructor._items.push(this);
+      }
+      await this.constructor.write(this);
+      return this;
+    }
+  }
+
+  InMemoryDocument.modelName = name;
+  memoryStore[name] = seed.map((item) => new InMemoryDocument(item));
+  registry[name] = InMemoryDocument;
+  return InMemoryDocument;
+};
+
+module.exports = createInMemoryModel;
