@@ -408,8 +408,89 @@ function MoviesPage({ movies, reload, navigate }) {
       <div className="vendor-table-shell">
         <table className="vendor-table">
           <thead><tr><th>Poster</th><th>Movie Name</th><th>Genre</th><th>Language</th><th>Theatre</th><th>Bookings</th><th>Revenue</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>{movies.map((movie) => <tr key={movie._id || movie.title}><td>{movie.image ? <img className="table-poster" src={movie.image} alt={movie.title} /> : <span className="movie-thumb"><Film size={18} /></span>}</td><td>{movie.title}</td><td>{movie.genre || "-"}</td><td>{movie.language || "-"}</td><td>{movie.theatre || movie.theatreName || "-"}</td><td>{movie.bookedSeats?.length || 0}</td><td>Rs {movie.revenue || 0}</td><td><span className="vendor-status">{movie.status || "active"}</span></td><td><div className="vendor-row-actions"><button type="button">View</button><button type="button" onClick={() => navigate("/vendor/add-movie", { state: { movie } })}>Edit</button><button type="button" onClick={() => deleteMovie(movie)}>Delete</button><button type="button" onClick={() => navigate("/vendor/seat-management", { state: { movieId: movie._id } })}>Manage Seats</button></div></td></tr>)}</tbody>
-        </table>
+<tbody>
+  {movies.map((movie) => (
+    <tr key={movie._id || movie.title}>
+      <td>
+        {movie.image ? (
+          <img
+            className="table-poster"
+            src={movie.image}
+            alt={movie.title}
+          />
+        ) : (
+          <span className="movie-thumb">
+            <Film size={18} />
+          </span>
+        )}
+      </td>
+
+      <td>{movie.title}</td>
+
+      <td>{movie.genre || "-"}</td>
+
+      <td>{movie.language || "-"}</td>
+
+      <td>{movie.theatre || movie.theatreName || "-"}</td>
+
+      <td>{movie.bookedSeats?.length || 0}</td>
+
+      <td>Rs {movie.revenue || 0}</td>
+
+      <td>
+        <span className="vendor-status">
+          {movie.status || "active"}
+        </span>
+      </td>
+
+      <td>
+        <div className="vendor-row-actions">
+          <button type="button">
+            View
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/vendor/add-movie", {
+                state: { movie },
+              })
+            }
+          >
+            Edit
+          </button>
+
+          <button
+            type="button"
+            onClick={() => hideMovie(movie)}
+          >
+            Hide
+          </button>
+
+          <button
+            type="button"
+            onClick={() => deleteMovie(movie)}
+          >
+            Delete
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/vendor/seat-management", {
+                state: {
+                  movieId: movie._id,
+                },
+              })
+            }
+          >
+            Manage Seats
+          </button>
+        </div>
+      </td>
+    </tr>
+  ))}
+</tbody>        </table>
       </div>
     </section>
   );
