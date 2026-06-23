@@ -1,0 +1,6 @@
+﻿"Bug ID","Module","Severity","Assigned To","ETA","Status"
+"BUG-001","Frontend API config","Medium","Frontend","2026-06-26","Open"
+"BUG-002","Duplicate frontend component paths","Medium","Frontend","2026-06-27","Open"
+"BUG-003","Payment provider is mocked","High","Backend","2026-07-05","Open"
+"BUG-004","Admin route hardening incomplete","High","Backend","2026-07-06","Open"
+"BUG-005","Formal automated tests missing","High","QA","2026-07-17","Open"

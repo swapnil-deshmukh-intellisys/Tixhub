@@ -4,11 +4,13 @@ import {
   FaCalendar,
   FaClock,
   FaFilm,
+  FaMapMarkerAlt,
   FaPlay,
   FaShareAlt,
   FaStar,
   FaTag,
   FaTicketAlt,
+  FaTv,
   FaUserPlus,
 } from "react-icons/fa";
 import "./MovieDetails.css";
@@ -16,26 +18,51 @@ import "./MovieDetails.css";
 const fallbackAvatar =
   "https://images.unsplash.com/photo-1511367461989-f85a21fda167?auto=format&fit=crop&w=300&q=80";
 
+function normalizeMovie(movie) {
+  const selectedScreen =
+    movie.screens?.[movie.selectedScreenIndex || 0] || movie.screens?.[0] || {};
+
+  return {
+    ...movie,
+    theatre: movie.theatre || movie.theatreName || "-",
+    city: movie.city || movie.theatreCity || "-",
+    address: movie.address || movie.location || movie.theatreAddress || "-",
+    screenName: movie.screenName || movie.screenNumber || selectedScreen.screenName || "-",
+    totalSeats: movie.totalSeats || selectedScreen.totalSeats || 0,
+    regularSeats: movie.regularSeats || selectedScreen.regularSeats || 0,
+    primeSeats: movie.primeSeats || selectedScreen.primeSeats || 0,
+    vipSeats: movie.vipSeats || selectedScreen.vipSeats || 0,
+    image: movie.posterUrl || movie.image,
+    bannerUrl: movie.bannerUrl || movie.image,
+  };
+}
+
 function MovieDetails() {
   const navigate = useNavigate();
   const location = useLocation();
-  const movie = location.state?.movie;
 
-  if (!movie) {
+  const storedMovie = sessionStorage.getItem("selectedMovie");
+  const rawMovie = location.state?.movie || (storedMovie ? JSON.parse(storedMovie) : null);
+
+  if (!rawMovie) {
     return (
       <div className="no-movie">
         <h1>No Movie Selected</h1>
-        <button onClick={() => navigate("/movies")}>Go Back to Movies</button>
+        <button onClick={() => navigate("/dashboard/movies")}>Go Back to Movies</button>
       </div>
     );
   }
 
+  const movie = normalizeMovie(rawMovie);
+
   const castMembers = movie.castMembers?.length
     ? movie.castMembers
     : splitLegacyPeople(movie.cast, "Actor");
+
   const crewMembers = movie.crewMembers?.length
     ? movie.crewMembers
     : splitLegacyPeople(movie.director, "Director");
+
   const offers = movie.isOfferApplicable ? movie.offers || [] : [];
 
   return (
@@ -43,7 +70,7 @@ function MovieDetails() {
       <section
         className="details-hero"
         style={{
-          backgroundImage: `linear-gradient(90deg, rgba(15,23,42,0.96), rgba(15,23,42,0.84), rgba(15,23,42,0.36)), url(${movie.image})`,
+          backgroundImage: `linear-gradient(90deg, rgba(15,23,42,0.96), rgba(15,23,42,0.84), rgba(15,23,42,0.36)), url(${movie.bannerUrl || movie.image})`,
         }}
       >
         <div className="poster-panel">
@@ -52,6 +79,7 @@ function MovieDetails() {
             alt={movie.title}
             className="details-poster"
           />
+
           {movie.trailerUrl && (
             <a className="trailer-link" href={movie.trailerUrl} target="_blank" rel="noreferrer">
               <FaPlay /> Trailers
@@ -83,10 +111,27 @@ function MovieDetails() {
           <div className="hero-actions">
             <button
               className="book-ticket-btn"
-              onClick={() => navigate("/seat-selection", { state: { movie } })}
+              onClick={() =>
+                navigate(`/dashboard/movies/${movie._id}/seats`, {
+                  state: {
+                    movie,
+                    theatre: { name: movie.theatre, city: movie.city },
+                    showtime: {
+                      time: movie.showTime || movie.showTimes?.[0] || "Show Time",
+                      date: { label: movie.showDate || movie.releaseDate || "Today" },
+                    },
+                    selectedSeats: 1,
+                    category: {
+                      name: "Regular",
+                      price: movie.regularSeatPrice || movie.ticketPrice || 0,
+                    },
+                  },
+                })
+              }
             >
               <FaTicketAlt /> Book tickets
             </button>
+
             <button className="share-btn"><FaShareAlt /> Share</button>
           </div>
         </div>
@@ -96,6 +141,53 @@ function MovieDetails() {
         <section className="detail-section">
           <h2>About the movie</h2>
           <p>{movie.aboutMovie || movie.description || "Movie synopsis will be updated soon."}</p>
+        </section>
+
+        <section className="detail-section">
+          <h2>Theatre & Screen Details</h2>
+
+          <div className="info-grid">
+            <Info label="Theatre" value={movie.theatre} />
+            <Info label="City" value={movie.city} />
+            <Info label="Address" value={movie.address} />
+            <Info label="Selected Screen" value={movie.screenName} />
+            <Info label="Show Date" value={movie.showDate} />
+            <Info label="Show Time" value={movie.showTime} />
+            <Info label="End Time" value={movie.endTime} />
+          </div>
+        </section>
+
+        {movie.screens?.length > 0 && (
+          <section className="detail-section">
+            <h2>Available Screens</h2>
+
+            <div className="screen-details-grid">
+              {movie.screens.map((screen, index) => (
+                <div className="screen-detail-card" key={`${screen.screenName}-${index}`}>
+                  <h3><FaTv /> {screen.screenName || `Screen ${index + 1}`}</h3>
+                  <p>Type: {screen.screenType || "2D"}</p>
+                  <p>Total Seats: {screen.totalSeats}</p>
+                  <p>Regular: {screen.regularSeats}</p>
+                  <p>Prime: {screen.primeSeats}</p>
+                  <p>VIP: {screen.vipSeats}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="detail-section">
+          <h2>Seat Pricing</h2>
+
+          <div className="info-grid">
+            <Info label="Regular Price" value={`₹${movie.regularSeatPrice || movie.ticketPrice || 0}`} />
+            <Info label="Prime Price" value={`₹${movie.primeSeatPrice || movie.premiumSeatPrice || 0}`} />
+            <Info label="VIP Price" value={`₹${movie.vipSeatPrice || 0}`} />
+            <Info label="Total Seats" value={movie.totalSeats} />
+            <Info label="Regular Seats" value={movie.regularSeats} />
+            <Info label="Prime Seats" value={movie.primeSeats} />
+            <Info label="VIP Seats" value={movie.vipSeats} />
+          </div>
         </section>
 
         {offers.length > 0 && (
@@ -132,10 +224,12 @@ function MovieDetails() {
         <section className="detail-section">
           <h2>Movie information</h2>
           <div className="info-grid">
-            <Info label="Theatre" value={movie.theatre} />
             <Info label="Director" value={movie.director} />
             <Info label="Lead" value={movie.hero} />
             <Info label="Language" value={movie.language} />
+            <Info label="Genre" value={movie.genre} />
+            <Info label="Certificate" value={movie.certificate} />
+            <Info label="Format" value={movie.format} />
           </div>
         </section>
       </main>
@@ -158,7 +252,7 @@ function PeopleRail({ people }) {
 }
 
 function Info({ label, value }) {
-  if (!value) return null;
+  if (!value && value !== 0) return null;
 
   return (
     <div className="info-card">

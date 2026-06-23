@@ -70,6 +70,10 @@ const ensureMoviesSchema = async (connection) => {
       show_time VARCHAR(80) NULL,
       show_times JSON NULL,
       total_seats INT NOT NULL DEFAULT 120,
+      regular_seats INT NOT NULL DEFAULT 0,
+      prime_seats INT NOT NULL DEFAULT 0,
+      vip_seats INT NOT NULL DEFAULT 0,
+      blocked_seats INT NOT NULL DEFAULT 0,
       booked_seats JSON NULL,
       ticket_price DECIMAL(10,2) NOT NULL DEFAULT 240,
       status ENUM('draft','upcoming','booking_open','now_showing','house_full','ended','cancelled','active','inactive','hidden') NOT NULL DEFAULT 'draft',
@@ -124,6 +128,10 @@ const ensureMoviesSchema = async (connection) => {
   await ensureColumn(connection, "movies", columnMap, "show_time", "VARCHAR(80) NULL");
   await ensureColumn(connection, "movies", columnMap, "show_times", "JSON NULL");
   await ensureColumn(connection, "movies", columnMap, "total_seats", "INT NOT NULL DEFAULT 120");
+  await ensureColumn(connection, "movies", columnMap, "regular_seats", "INT NOT NULL DEFAULT 0");
+  await ensureColumn(connection, "movies", columnMap, "prime_seats", "INT NOT NULL DEFAULT 0");
+  await ensureColumn(connection, "movies", columnMap, "vip_seats", "INT NOT NULL DEFAULT 0");
+  await ensureColumn(connection, "movies", columnMap, "blocked_seats", "INT NOT NULL DEFAULT 0");
   await ensureColumn(connection, "movies", columnMap, "booked_seats", "JSON NULL");
   await ensureColumn(connection, "movies", columnMap, "ticket_price", "DECIMAL(10,2) NOT NULL DEFAULT 240");
   await connection.query(`ALTER TABLE movies MODIFY status ${movieStatusDefinition}`);

@@ -110,6 +110,11 @@
   cursor:pointer;
 }
 
+.select-seats-btn:disabled{
+  opacity:0.55;
+  cursor:not-allowed;
+}
+
 @media(max-width:560px){
   .seat-count-modal{
     padding:24px;

@@ -1,0 +1,5 @@
+﻿"Sprint","Features","Completed","In Progress","Pending","Bugs","Testing Status","Release Readiness","Health Status"
+"Sprint 1 - Stabilization","Audit, roadmap controls, movie browse, movie seats, movie payment, QR","TH-001, TH-019","TH-002, TH-003","TH-004, TH-005","0 logged","Manual pending","Not ready","Yellow"
+"Sprint 2 - Flights/Vendor","Flight booking, vendor movie ops, vendor flight ops","None","None","TH-006, TH-007, TH-008, TH-009, TH-010","0 logged","Pending","Not ready","Yellow"
+"Sprint 3 - Admin/Modules","Wallet, admin, other listings","None","None","TH-011, TH-012, TH-013","0 logged","Pending","Not ready","Yellow"
+"Sprint 4 - Release","Regression, DevOps, hardening","None","None","TH-014, TH-015, TH-016","0 logged","Pending","Not ready","Red"

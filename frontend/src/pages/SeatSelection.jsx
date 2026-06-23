@@ -14,15 +14,52 @@ const seatSections = [
     title: "₹340 CLASSIC PLUS ROWS",
     rows: ["H", "I"],
     price: 340,
-    category: "Classic Plus",
+    category: "Prime",
   },
   {
     title: "₹240 CLASSIC ROWS",
     rows: ["J", "K"],
     price: 240,
-    category: "Classic",
+    category: "Regular",
   },
 ];
+
+const seatCategoryLabels = {
+  vip: "VIP",
+  prime: "Prime",
+  regular: "Regular",
+  recliner: "VIP",
+  prime_plus: "Prime",
+  classic: "Regular",
+  "classic plus": "Prime",
+};
+
+const normalizeSeatCategory = (value) => seatCategoryLabels[String(value || "").toLowerCase()] || String(value || "Regular");
+
+const groupLiveSeats = (seats) => {
+  const byCategory = new Map();
+  seats.forEach((seat) => {
+    const categoryName = normalizeSeatCategory(seat.seatType || seat.category);
+    const seatNo = seat.seatNo || seat.seatNumber;
+    const rowName = seat.rowName || String(seatNo || "").replace(/\d/g, "") || "A";
+    if (!byCategory.has(categoryName)) byCategory.set(categoryName, new Map());
+    const rows = byCategory.get(categoryName);
+    if (!rows.has(rowName)) rows.set(rowName, []);
+    rows.get(rowName).push({ ...seat, seatNo, rowName });
+  });
+
+  return ["VIP", "Prime", "Regular"].map((categoryName) => {
+    const rows = byCategory.get(categoryName) || new Map();
+    return {
+      category: categoryName,
+      price: rows.values().next().value?.[0]?.price || 0,
+      rows: [...rows.entries()].map(([row, rowSeats]) => ({
+        row,
+        seats: rowSeats.sort((a, b) => Number(String(a.seatNumber || a.seatNo).replace(/\D/g, "")) - Number(String(b.seatNumber || b.seatNo).replace(/\D/g, ""))),
+      })),
+    };
+  }).filter((section) => section.rows.length);
+};
 
 function SeatSelection() {
   const navigate = useNavigate();
@@ -33,7 +70,7 @@ function SeatSelection() {
     theatre,
     showtime,
     selectedSeats = 2,
-    category = { name: "Classic", price: 240 },
+    category = { name: "Regular", price: 240 },
   } = location.state || {};
 
   const [selected, setSelected] = useState([]);
@@ -50,7 +87,7 @@ function SeatSelection() {
     const showDate = showtime?.date?.value || showtime?.date?.label || "";
     const showTime = showtime?.time || "";
 
-    fetch(`http://localhost:5000/api/seats/${encodeURIComponent(showId)}?movieId=${encodeURIComponent(movie._id)}&theatre=${encodeURIComponent(theatreName)}&screenId=${encodeURIComponent(movie.screenNumber || "Screen 1")}&showDate=${encodeURIComponent(showDate)}&showTime=${encodeURIComponent(showTime)}&totalSeats=${encodeURIComponent(movie.totalSeats || 187)}&price=${encodeURIComponent(movie.ticketPrice || category.price || 240)}`, {
+    fetch(`http://localhost:5000/api/seats/${encodeURIComponent(showId)}?movieId=${encodeURIComponent(movie._id)}&theatre=${encodeURIComponent(theatreName)}&screenId=${encodeURIComponent(movie.screenNumber || movie.screenName || "Screen 1")}&showDate=${encodeURIComponent(showDate)}&showTime=${encodeURIComponent(showTime)}&totalSeats=${encodeURIComponent(movie.totalSeats || 187)}&regularSeats=${encodeURIComponent(movie.regularSeats || 0)}&primeSeats=${encodeURIComponent(movie.primeSeats || 0)}&vipSeats=${encodeURIComponent(movie.vipSeats || 0)}&blockedSeats=${encodeURIComponent(movie.blockedSeats || 0)}&price=${encodeURIComponent(movie.ticketPrice || category.price || 240)}&regularSeatPrice=${encodeURIComponent(movie.regularSeatPrice || movie.ticketPrice || category.price || 240)}&premiumSeatPrice=${encodeURIComponent(movie.premiumSeatPrice || movie.primeSeatPrice || movie.ticketPrice || category.price || 240)}&vipSeatPrice=${encodeURIComponent(movie.vipSeatPrice || movie.ticketPrice || category.price || 240)}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("token") || sessionStorage.getItem("token")}`,
       },
@@ -69,10 +106,16 @@ function SeatSelection() {
     );
   }
 
-  const activeCategory = category.name || "Classic";
+  const activeCategory = category.name || "Regular";
+  const liveSections = useMemo(() => groupLiveSeats(liveSeats), [liveSeats]);
+  const useLiveLayout = liveSections.length > 0;
+  const activeLiveCategory = normalizeSeatCategory(activeCategory);
 
   const toggleSeat = (seatNo, sectionCategory) => {
-    if (sectionCategory !== activeCategory) return;
+    const normalizedSection = normalizeSeatCategory(sectionCategory);
+    const normalizedActive = normalizeSeatCategory(activeCategory);
+    if (normalizedSection !== normalizedActive && !useLiveLayout) return;
+    if (useLiveLayout && normalizedSection !== normalizedActive) return;
     if (unavailableSeats.includes(seatNo)) return;
 
     setSelected((prev) => {
@@ -114,7 +157,7 @@ function SeatSelection() {
 
       <main className="seat-area">
         <div className="row-side">
-          {["A", "B", "C", "D", "E", "F", "G", "", "H", "I", "", "J", "K"].map(
+          {(useLiveLayout ? liveSections.flatMap((section) => [...section.rows.map((row) => row.row), ""]) : ["A", "B", "C", "D", "E", "F", "G", "", "H", "I", "", "J", "K"]).map(
             (r, i) => (
               <span key={i}>{r}</span>
             )
@@ -122,9 +165,42 @@ function SeatSelection() {
         </div>
 
         <div className="seat-layout">
-          {seatSections.map((section) => (
+          {useLiveLayout ? liveSections.map((section) => (
+            <div className="seat-section" key={section.category}>
+              <h3>Rs {section.price || category.price || 0} {section.category.toUpperCase()} ROWS</h3>
+
+              {section.rows.map(({ row, seats }) => (
+                <div className="seat-row" key={row}>
+                  <div className="seat-gap"></div>
+
+                  {seats.map((seat) => {
+                    const seatNo = seat.seatNo || seat.seatNumber;
+                    const displayNo = String(seat.seatNumber || seatNo).replace(row, "");
+                    const isSold = unavailableSeats.includes(seatNo) || unavailableSeats.includes(seat.seatNumber);
+                    const isSelected = selected.includes(seatNo);
+                    const isDisabled = normalizeSeatCategory(section.category) !== activeLiveCategory;
+
+                    return (
+                      <button
+                        key={seatNo}
+                        className={`seat 
+                          ${isSold ? "sold" : ""} 
+                          ${isSelected ? "selected" : ""} 
+                          ${isDisabled ? "disabled-seat" : ""}
+                        `}
+                        disabled={isSold || isDisabled}
+                        onClick={() => toggleSeat(seatNo, section.category)}
+                      >
+                        {displayNo}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )) : seatSections.map((section) => (
             <div className="seat-section" key={section.title}>
-              <h3>{section.title}</h3>
+              <h3>Rs {section.price} {section.category.toUpperCase()} ROWS</h3>
 
               {section.rows.map((row) => (
                 <div className="seat-row" key={row}>

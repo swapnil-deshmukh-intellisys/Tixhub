@@ -29,6 +29,29 @@ const validateMoviePayload = (body) => {
   return "";
 };
 
+const numberValue = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeMoviePayload = (body) => {
+  const totalSeats = numberValue(body.totalSeats);
+  const vipSeats = Math.min(numberValue(body.vipSeats), totalSeats);
+  const primeSeats = Math.min(numberValue(body.primeSeats), Math.max(totalSeats - vipSeats, 0));
+  return {
+    ...body,
+    totalSeats,
+    vipSeats,
+    primeSeats,
+    regularSeats: Math.max(totalSeats - vipSeats - primeSeats, 0),
+    blockedSeats: numberValue(body.blockedSeats),
+    regularSeatPrice: numberValue(body.regularSeatPrice || body.ticketPrice),
+    primeSeatPrice: numberValue(body.primeSeatPrice || body.premiumSeatPrice),
+    premiumSeatPrice: numberValue(body.premiumSeatPrice || body.primeSeatPrice),
+    vipSeatPrice: numberValue(body.vipSeatPrice),
+  };
+};
+
 /* GET MOVIES */
 
 router.get(
@@ -146,12 +169,13 @@ router.post(
   async (req, res) => {
 
     try {
-      const validationMessage = validateMoviePayload(req.body);
+      const payload = normalizeMoviePayload(req.body);
+      const validationMessage = validateMoviePayload(payload);
       if (validationMessage) return res.status(400).json({ message: validationMessage });
 
       const movie =
       new Movie({
-        ...req.body,
+        ...payload,
         vendor: req.user.id,
         vendorId: req.user.id,
       });
@@ -181,7 +205,8 @@ router.put(
   async (req, res) => {
 
     try {
-      const validationMessage = validateMoviePayload(req.body);
+      const payload = normalizeMoviePayload(req.body);
+      const validationMessage = validateMoviePayload(payload);
       if (validationMessage) return res.status(400).json({ message: validationMessage });
 
       const updatedMovie =
@@ -192,7 +217,7 @@ router.put(
           ...(req.user.role === "admin" ? {} : { $or: [{ vendor: req.user.id }, { vendorId: req.user.id }] }),
         },
 
-        req.body,
+        payload,
 
         { new:true }
 

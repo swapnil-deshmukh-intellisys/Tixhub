@@ -1,0 +1,7 @@
+﻿"Task ID","Today's Tasks","Tomorrow Tasks","Day After Tomorrow Tasks","Estimated Hours","Priority","Dependencies","Status"
+"TH-001","Finalize management baseline","Update after completed code work","Update sprint progress","4","High","None","Done"
+"TH-019","Update management pack with timeline buckets","Use updated tracker for tomorrow planning","Carry forward progress without reset","2","High","TH-001","Done"
+"TH-002","Audit movie listing/detail data gaps","Patch fallbacks and route issues","Regression test movie browse","6","High","TH-001","In Progress"
+"TH-003","Verify live seat sync assumptions","Multi-session user/vendor test","Fix any seat conflict bugs","5","High","TH-002","In Progress"
+"TH-004","Review movie payment status rules","Patch payment/booking status consistency","Confirm QR only for success+confirmed","6","High","TH-003","Pending"
+"TH-006","Prepare flight search test cases","Start flight data cleanup","Flight details smoke","5","High","TH-001","Pending"

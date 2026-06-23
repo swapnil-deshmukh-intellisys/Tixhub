@@ -136,10 +136,14 @@
   background: white;
   border-radius: 18px;
   overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .movie-card:hover {
   transform: translateY(-6px);
+  box-shadow: 0 20px 36px rgba(15, 23, 42, 0.12);
 }
 
 /* IMAGE */
@@ -159,15 +163,18 @@
 
 /* INFO */
 .movie-info {
-  padding: 16px;
+  padding: 16px 18px 18px;
 }
 
 .movie-info h3 {
-  font-size: 22px;
+  font-size: 19px;
   font-weight: 900;
   color: #020617;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .movie-info p {

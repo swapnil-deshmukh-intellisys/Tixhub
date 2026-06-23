@@ -1,0 +1,7 @@
+﻿"Risk Type","Description","Severity","Owner","Mitigation Plan","Status"
+"Technical","Mixed static fallback data and DB data can create inconsistent flight/movie results","High","Engineering","Normalize source of truth and document fallback policy","Open"
+"Technical","Payment APIs are mock-level and not production provider-ready","High","Backend","Integrate provider or mark as sandbox-only","Open"
+"Security","Hardcoded local DB credentials in db.js","High","DevOps","Move to environment variables and rotate secrets","Open"
+"QA","Automated tests are missing","High","QA","Add targeted API smoke and frontend build regression","Open"
+"Product","Other vendor modules are early and may not match business rules","Medium","Product","Define exact hotel/event/bus/package requirements","Open"
+"DevOps","Deployment configuration and migration sequencing not finalized","High","DevOps","Create env docs, migration plan, health checks","Open"

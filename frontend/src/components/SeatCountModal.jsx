@@ -1,16 +1,40 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import "./SeatCountModal.css";
 
-const priceCategories = [
-  { name: "Prime", price: 250 },
-  { name: "Classic Plus", price: 180 },
-  { name: "Classic", price: 150 },
-];
+const toNumber = (value) => Number(value || 0);
 
-function SeatCountModal({ movie, theatre, showtime, onClose, onSelectSeats }) {
+function SeatCountModal({ movie, onClose, onSelectSeats }) {
   const [seatCount, setSeatCount] = useState(2);
-  const [category, setCategory] = useState(priceCategories[0]);
+  const priceCategories = useMemo(() => {
+    const categories = [
+      {
+        name: "VIP",
+        key: "vip",
+        seats: toNumber(movie?.vipSeats),
+        price: toNumber(movie?.vipSeatPrice),
+      },
+      {
+        name: "Prime",
+        key: "prime",
+        seats: toNumber(movie?.primeSeats),
+        price: toNumber(movie?.primeSeatPrice || movie?.premiumSeatPrice),
+      },
+      {
+        name: "Regular",
+        key: "regular",
+        seats: toNumber(movie?.regularSeats),
+        price: toNumber(movie?.regularSeatPrice || movie?.ticketPrice),
+      },
+    ];
+
+    return categories.filter((item) => item.seats > 0 || item.price > 0);
+  }, [movie]);
+  const [category, setCategory] = useState(null);
+
+  useEffect(() => {
+    setCategory(priceCategories[0] || null);
+  }, [priceCategories]);
 
   return (
     <div className="seat-count-backdrop">
@@ -20,9 +44,8 @@ function SeatCountModal({ movie, theatre, showtime, onClose, onSelectSeats }) {
         </button>
 
         <div className="seat-count-header">
-          <p>{movie?.title}</p>
-          <h2>How many seats?</h2>
-          <span>{theatre?.name} · {showtime?.time}</span>
+          <h2>{movie?.title || "Movie Name"}</h2>
+          <span>How many seats?</span>
         </div>
 
         <div className="seat-count-options">
@@ -41,7 +64,7 @@ function SeatCountModal({ movie, theatre, showtime, onClose, onSelectSeats }) {
           {priceCategories.map((item) => (
             <button
               key={item.name}
-              className={category.name === item.name ? "active" : ""}
+              className={category?.name === item.name ? "active" : ""}
               onClick={() => setCategory(item)}
             >
               <span>{item.name}</span>
@@ -52,6 +75,7 @@ function SeatCountModal({ movie, theatre, showtime, onClose, onSelectSeats }) {
 
         <button
           className="select-seats-btn"
+          disabled={!category}
           onClick={() =>
             onSelectSeats({
               seatCount,

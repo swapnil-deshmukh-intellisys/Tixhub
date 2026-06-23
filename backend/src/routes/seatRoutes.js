@@ -28,7 +28,14 @@ const contextFromRequest = (req) => {
     showDate: req.query.showDate || body.showDate,
     showTime: req.query.showTime || body.showTime,
     totalSeats: req.query.totalSeats || body.totalSeats,
+    regularSeats: req.query.regularSeats || body.regularSeats,
+    primeSeats: req.query.primeSeats || body.primeSeats,
+    vipSeats: req.query.vipSeats || body.vipSeats,
+    blockedSeats: req.query.blockedSeats || body.blockedSeats,
     price: req.query.price || body.price,
+    regularSeatPrice: req.query.regularSeatPrice || body.regularSeatPrice,
+    premiumSeatPrice: req.query.premiumSeatPrice || body.premiumSeatPrice,
+    vipSeatPrice: req.query.vipSeatPrice || body.vipSeatPrice,
   };
 };
 

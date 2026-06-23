@@ -104,6 +104,10 @@ const movieFromRow = (Model, row) =>
     showTime: row.show_time || "",
     showTimes: parseJson(row.show_times, []),
     totalSeats: Number(row.total_seats || 120),
+    regularSeats: Number(row.regular_seats || 0),
+    primeSeats: Number(row.prime_seats || 0),
+    vipSeats: Number(row.vip_seats || 0),
+    blockedSeats: Number(row.blocked_seats || 0),
     bookedSeats: parseJson(row.booked_seats, []),
     ticketPrice: Number(row.ticket_price || 240),
     status: row.status || "active",
@@ -128,6 +132,7 @@ const movieFromRow = (Model, row) =>
     seatLayout: parseJson(row.seat_layout, []),
     regularSeatPrice: Number(row.regular_seat_price || row.ticket_price || 0),
     premiumSeatPrice: Number(row.premium_seat_price || 0),
+    primeSeatPrice: Number(row.premium_seat_price || 0),
     vipSeatPrice: Number(row.vip_seat_price || 0),
     averageRating: Number(row.average_rating || 0),
     totalReviews: Number(row.total_reviews || 0),
@@ -386,7 +391,8 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
             `INSERT INTO movies (
               id, vendor_id, vendor, title, language, duration, image, poster_url, banner_url,
               description, theatre, theatre_name, theatre_city, theatre_address, screen_number,
-              show_date, show_time, show_times, total_seats, booked_seats, ticket_price, status,
+              show_date, show_time, show_times, total_seats, regular_seats, prime_seats,
+              vip_seats, blocked_seats, booked_seats, ticket_price, status,
               genre, cast, director, release_date, rating, hero, certificate, format, trailer_url,
               trailer_file_url, gallery_images, documents, interest_count, about_movie, screen_name,
               city, location, end_time, seat_layout, regular_seat_price, premium_seat_price,
@@ -394,7 +400,7 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               is_offer_applicable, offers, cast_members, crew_members,
               created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
               vendor_id = VALUES(vendor_id),
               vendor = VALUES(vendor),
@@ -414,6 +420,10 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               show_time = VALUES(show_time),
               show_times = VALUES(show_times),
               total_seats = VALUES(total_seats),
+              regular_seats = VALUES(regular_seats),
+              prime_seats = VALUES(prime_seats),
+              vip_seats = VALUES(vip_seats),
+              blocked_seats = VALUES(blocked_seats),
               booked_seats = VALUES(booked_seats),
               ticket_price = VALUES(ticket_price),
               status = VALUES(status),
@@ -467,6 +477,10 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               document.showTime || "",
               JSON.stringify(document.showTimes || []),
               Number(document.totalSeats || 120),
+              Number(document.regularSeats || 0),
+              Number(document.primeSeats || 0),
+              Number(document.vipSeats || 0),
+              Number(document.blockedSeats || 0),
               JSON.stringify(document.bookedSeats || []),
               Number(document.ticketPrice || 240),
               document.status || "active",
@@ -490,7 +504,7 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               document.endTime || "",
               JSON.stringify(document.seatLayout || []),
               Number(document.regularSeatPrice || document.ticketPrice || 0),
-              Number(document.premiumSeatPrice || 0),
+              Number(document.premiumSeatPrice || document.primeSeatPrice || 0),
               Number(document.vipSeatPrice || 0),
               Number(document.averageRating || 0),
               Number(document.totalReviews || 0),

@@ -1,0 +1,7 @@
+﻿"Week Number","Feature","Page","Module","Owner","Planned Hours","Actual Hours","Dependencies","Target Date","Completion %","Status","Remarks"
+"Week 1","Movie/flight/user booking stabilization","Dashboard booking pages","User booking","Full Stack","40","4","Existing routes/APIs","2026-06-29","45","In Progress","Focus on payment, seats, QR"
+"Week 2","Vendor movie and flight operations","VendorDashboard, AddFlight","Vendor ops","Full Stack","38","0","Week 1","2026-07-06","25","Pending","CRUD, settlements, scanners"
+"Week 3","Other vendor modules and admin","AddHotel, AddEvent, AdminDashboard","Admin/vendor listings","Full Stack","36","0","Week 2","2026-07-13","15","Pending","Normalize generic listings"
+"Week 4","QA, bugs, release readiness","All","QA/DevOps","QA+DevOps","42","0","Feature freeze","2026-07-24","10","Pending","Build, smoke, security"
+"Month 2","Hardening and UAT","All","Security, performance, UAT","Engineering+Product","80","0","Week 4","2026-08-28","0","Pending","Beta acceptance"
+"Month 3","Production launch","All","Deployment","DevOps","60","0","UAT signoff","2026-09-18","0","Pending","Cutover and monitoring"

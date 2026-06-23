@@ -289,17 +289,28 @@
   align-items:start;
 }
 
+.vendor-analytics-grid{
+  display:grid;
+  grid-template-columns:1.35fr 1fr;
+  gap:20px;
+  align-items:start;
+}
+
 .vendor-panel{
   padding:20px;
   min-width:0;
 }
 
 .sales-panel{
-  min-height:352px;
+  min-height:0;
+  max-height:320px;
+  overflow:hidden;
 }
 
 .revenue-panel{
-  min-height:352px;
+  min-height:0;
+  max-height:320px;
+  overflow:hidden;
 }
 
 .donut-panel,
@@ -335,7 +346,8 @@
 }
 
 .line-chart{
-  height:276px;
+  height:230px;
+  max-height:260px;
   position:relative;
   border-radius:18px;
   background:linear-gradient(180deg,#ffffff 0%,#fbfdfc 100%);
@@ -344,8 +356,8 @@
 
 .line-chart svg{
   width:100%;
-  height:210px;
-  margin-top:38px;
+  height:164px;
+  margin-top:36px;
 }
 
 .line-chart polyline{
@@ -391,12 +403,13 @@
 
 .revenue-panel h3{
   color:#2e8d5a;
-  font-size:28px;
-  margin-bottom:16px;
+  font-size:24px;
+  margin-bottom:10px;
 }
 
 .bar-chart{
-  height:174px;
+  height:156px;
+  max-height:190px;
   display:grid;
   grid-template-columns:repeat(7,1fr);
   align-items:end;
@@ -546,6 +559,152 @@
 .movie-production-panel{
   margin-top:22px;
   min-height:auto;
+}
+
+.movie-card-panel{
+  margin-top:22px;
+  min-height:auto;
+}
+
+.vendor-movie-card-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:16px;
+}
+
+.vendor-movie-card{
+  border:1px solid #e0f0e7;
+  border-radius:16px;
+  background:#ffffff;
+  padding:0;
+  overflow:hidden;
+  text-align:left;
+  cursor:pointer;
+  box-shadow:0 10px 24px rgba(33,86,54,0.06);
+}
+
+.vendor-movie-card.active{
+  border-color:#29b86b;
+  box-shadow:0 16px 30px rgba(41,184,107,0.18);
+}
+
+.vendor-movie-card img,
+.vendor-movie-card-placeholder{
+  width:100%;
+  aspect-ratio:2 / 3;
+  object-fit:cover;
+  display:grid;
+  place-items:center;
+  background:#eaf8f0;
+  color:#238e55;
+}
+
+.vendor-movie-card strong{
+  display:block;
+  padding:12px;
+  color:#263a2d;
+  font-size:14px;
+  font-weight:900;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.movie-card-details{
+  margin-top:16px;
+}
+
+.vendor-muted-text{
+  color:#819288;
+  font-weight:800;
+}
+
+.vendor-section-heading{
+  margin-bottom:18px;
+}
+
+.vendor-section-heading h1{
+  color:#203528;
+  font-size:26px;
+  line-height:1.2;
+  margin-bottom:6px;
+}
+
+.vendor-section-heading p{
+  color:#778b80;
+  font-weight:800;
+}
+
+.management-overview-panel{
+  margin-top:22px;
+  min-height:auto;
+}
+
+.management-grid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:14px;
+}
+
+.overview-block,
+.category-sales{
+  display:grid;
+  gap:10px;
+}
+
+.overview-block{
+  border:1px solid #e3f1e9;
+  border-radius:16px;
+  background:#f8fcfa;
+  padding:14px;
+  min-width:0;
+}
+
+.overview-block h3{
+  color:#263a2d;
+  font-size:14px;
+  margin-bottom:4px;
+}
+
+.overview-block p,
+.category-sales p{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  border-bottom:1px solid #e8f2ec;
+  padding-bottom:8px;
+  color:#819288;
+  font-weight:800;
+}
+
+.overview-block p:last-child,
+.category-sales p:last-child{
+  border-bottom:0;
+  padding-bottom:0;
+}
+
+.overview-block strong,
+.category-sales strong{
+  color:#263a2d;
+  font-weight:900;
+  text-align:right;
+}
+
+.performance-overview{
+  display:grid;
+  gap:16px;
+}
+
+.vendor-primary-action{
+  width:100%;
+  border:0;
+  border-radius:14px;
+  background:#29b86b;
+  color:#ffffff;
+  min-height:44px;
+  margin-top:14px;
+  font-weight:900;
+  cursor:pointer;
 }
 
 .movie-module-grid{
@@ -1075,8 +1234,13 @@
 @media(max-width:1180px){
   .vendor-card-grid,
   .vendor-dashboard-grid,
+  .vendor-analytics-grid,
   .vendor-operations-grid,
   .seat-management-page{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  .management-grid{
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
 
@@ -1114,10 +1278,12 @@
 
   .vendor-card-grid,
   .vendor-dashboard-grid,
+  .vendor-analytics-grid,
   .vendor-operations-grid,
   .seat-management-page,
   .scanner-page,
   .movie-module-grid,
+  .management-grid,
   .vendor-filter-grid,
   .vendor-settings-form,
   .compact-form{
@@ -1146,6 +1312,27 @@
 
   .movie-module-grid{
     grid-template-columns:1fr;
+  }
+
+  .vendor-movie-card-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  .sales-panel,
+  .revenue-panel{
+    max-height:300px;
+  }
+
+  .line-chart{
+    height:210px;
+  }
+
+  .line-chart svg{
+    height:148px;
+  }
+
+  .bar-chart{
+    height:138px;
   }
 
   .mini-seat-layout{

@@ -80,6 +80,9 @@ const fallbackStats = {
   bookedSeats: 0,
   blockedSeats: 0,
   totalCustomers: 0,
+  cancelledBookings: 0,
+  pendingConfirmations: 0,
+  upcomingSchedules: 0,
   todayRevenue: 0,
   monthlyRevenue: 0,
   tixhubCommission: 0,
@@ -124,7 +127,9 @@ function VendorDashboard() {
     return serviceModules;
   }, [flights.length, user]);
 
-  const activeService = serviceModules.includes(activeRoute)
+  const activeService = activeRoute === "dashboard"
+    ? "all"
+    : serviceModules.includes(activeRoute)
     ? activeRoute
     : activeRoute.startsWith("flight") || ["add-flight", "my-flights"].includes(activeRoute)
       ? "flights"
@@ -198,6 +203,26 @@ function VendorDashboard() {
     return () => socket.disconnect();
   }, []);
 
+  const topListings = useMemo(() => [
+    ...movies.map((movie) => ({
+      id: movie._id || movie.title,
+      title: movie.title || "Untitled Movie",
+      meta: `Movies · ${movie.theatre || movie.genre || "Listing"}`,
+      price: movie.ticketPrice || movie.price || 250,
+      image: movie.image || movie.posterUrl || movie.bannerUrl || "",
+    })),
+    ...flights.map((flight) => ({
+      id: flight._id || flight.flightNumber,
+      title: flight.airlineName || flight.flightNumber || "Flight",
+      meta: `Flights · ${flight.fromCode || flight.fromCity || ""} ${flight.toCode ? `to ${flight.toCode}` : ""}`,
+      price: flight.ticketPrice || flight.baseFare || 0,
+      image: flight.airlineLogo || "",
+    })),
+  ].slice(0, 4).map((listing, index) => ({
+    ...listing,
+    value: [42, 28, 18, 12][index] || 10,
+  })), [movies, flights]);
+
   const topMovies = useMemo(() => movies.slice(0, 4).map((movie, index) => ({
     id: movie._id || movie.title,
     title: movie.title || "Untitled Movie",
@@ -208,14 +233,14 @@ function VendorDashboard() {
   })), [movies]);
 
   const cardData = [
-    ["Total Listings", stats.totalListings || movies.length + flights.length, Film],
     ["Total Bookings", stats.totalBookings || bookings.length || 0, Ticket],
-    ["Today Bookings", stats.todayBookings || 0, CalendarDays],
+    ["Today's Bookings", stats.todayBookings || 0, CalendarDays],
     ["Total Revenue", `Rs ${stats.revenue || 0}`, BarChart3],
-    ["Pending Settlements", `Rs ${stats.pendingSettlements || stats.pendingSettlement || 0}`, CreditCard],
-    ["Available Seats", stats.availableSeats || 0, Ticket],
-    ["Booked Seats", stats.bookedSeats || 0, Ticket],
-    ["Blocked Seats", stats.blockedSeats || 0, Ticket],
+    ["Active Listings", stats.activeListings || movies.length + flights.length, BriefcaseBusiness],
+    ["Upcoming Schedules", stats.upcomingSchedules || theatreOverview.shows?.length || 0, CalendarDays],
+    ["Total Customers", stats.totalCustomers || customers.length || 0, Users],
+    ["Cancelled Bookings", stats.cancelledBookings || bookings.filter((booking) => normalizeStatus(booking) === "cancelled").length, ShieldCheck],
+    ["Pending Confirmations", stats.pendingConfirmations || bookings.filter((booking) => normalizeStatus(booking) === "pending").length, Bell],
   ];
 
   const logout = () => {
@@ -247,7 +272,7 @@ function VendorDashboard() {
     if (activeRoute === "profile") return <ProfilePage user={user} />;
     if (activeRoute === "support") return <SupportPage />;
     if (activeRoute === "availability") return <AvailabilityPage rows={availability} movies={movies} />;
-    return <DashboardHome cardData={cardData} stats={stats} bookings={bookings} topMovies={topMovies} navigate={navigate} />;
+    return <DashboardHome cardData={cardData} stats={stats} bookings={bookings} customers={customers} scans={ticketScans} refunds={refunds} notifications={notifications} listings={[...movies, ...flights]} schedules={theatreOverview.shows || []} topListings={topListings} navigate={navigate} />;
   };
 
   return (
@@ -318,7 +343,19 @@ function ServiceSwitcher({ enabledServices, activeService, navigate }) {
   );
 }
 
-function DashboardHome({ cardData, stats, bookings, topMovies, navigate }) {
+function DashboardHome({ cardData, stats, bookings, customers, scans, refunds, notifications, listings, schedules, topListings, navigate }) {
+  const bookingStatusRows = [
+    ["Confirmed", bookings.filter((booking) => normalizeStatus(booking) === "confirmed").length],
+    ["Pending", bookings.filter((booking) => normalizeStatus(booking) === "pending").length],
+    ["Cancelled", bookings.filter((booking) => normalizeStatus(booking) === "cancelled").length],
+    ["Completed", bookings.filter((booking) => normalizeStatus(booking) === "completed").length],
+  ];
+  const scanRows = [
+    ["Total Scans Today", scans.length],
+    ["Successful Scans", scans.filter((scan) => ["valid", "checked_in", "success"].includes(String(scan.status || scan.scan_status).toLowerCase())).length],
+    ["Failed Scans", scans.filter((scan) => ["invalid", "failed", "already_used"].includes(String(scan.status || scan.scan_status).toLowerCase())).length],
+  ];
+
   return (
     <>
       <section className="vendor-card-grid">
@@ -330,32 +367,77 @@ function DashboardHome({ cardData, stats, bookings, topMovies, navigate }) {
         ))}
       </section>
 
-      <section className="vendor-dashboard-grid">
-        <article className="vendor-panel sales-panel"><PanelTitle title="Booking Trend" /><LineChart values={weeklySales} /></article>
-        <article className="vendor-panel revenue-panel"><PanelTitle title="Revenue Trend" right="2026" /><h3>Rs {stats.revenue || 0}</h3><BarChart values={revenueBars} /></article>
-        <article className="vendor-panel"><PanelTitle title="Occupancy Trend" right={`${occupancy(stats)}%`} /><div className="flight-seat-summary"><span style={{ "--value": `${occupancy(stats)}%` }} /><p>Occupancy</p><strong>{occupancy(stats)}%</strong></div></article>
-        <article className="vendor-panel movie-list-panel"><PanelTitle title="Top Selling Listings" /><MovieList movies={topMovies} showValue /></article>
-        <article className="vendor-panel"><PanelTitle title="Notifications" right="Today" /><InfoList rows={["Settlement cycle is pending review.", "Keep show seat availability updated.", "New booking alerts will appear here."]} /></article>
-        <article className="vendor-panel"><PanelTitle title="Pending Actions" right="Vendor" /><div className="quick-action-grid"><button onClick={() => navigate("/vendor/payment-details")}>Update Payment Details</button><button onClick={() => navigate("/vendor/bookings")}>Review Bookings</button><button onClick={() => navigate("/vendor/settlements")}>Check Settlements</button><button onClick={() => navigate("/vendor/movies")}>Manage Listings</button></div></article>
+      <section className="vendor-analytics-grid">
+        <article className="vendor-panel sales-panel"><PanelTitle title="Booking Trends Chart" right="Live" /><LineChart values={weeklySales} /></article>
+        <article className="vendor-panel revenue-panel"><PanelTitle title="Revenue Trends Chart" right="2026" /><h3>Rs {stats.revenue || 0}</h3><BarChart values={revenueBars} /></article>
+        <article className="vendor-panel"><PanelTitle title="Category Wise Sales" right="All" /><CategorySales stats={stats} bookings={bookings} /></article>
+        <article className="vendor-panel"><PanelTitle title="Monthly Performance Overview" right={`${occupancy(stats)}%`} /><PerformanceOverview stats={stats} /></article>
       </section>
 
       <section className="vendor-operations-grid">
         <BookingsTable title="Recent Bookings" bookings={bookings.slice(0, 6)} compact />
-        <article className="vendor-panel quick-actions-panel"><PanelTitle title="Movie Quick Actions" /><DashboardMovieQuickActions navigate={navigate} /></article>
+        <article className="vendor-panel"><PanelTitle title="Recent Customer Activity" right="Live" /><InfoList rows={(customers.length ? customers.slice(0, 5).map((customer) => `${customer.customerName || customer.name || "Customer"} · ${customer.totalBookings || 1} booking${Number(customer.totalBookings || 1) === 1 ? "" : "s"}`) : ["Customer activity will appear after the first booking."])} /></article>
+      </section>
+
+      <section className="vendor-operations-grid">
+        <article className="vendor-panel"><PanelTitle title="Recent QR Scans" right="Gate" /><InfoList rows={(scans.length ? scans.slice(0, 5).map((scan) => `${scan.bookingCode || scan.booking_id || scan.bookingId || "Ticket"} · ${scan.status || scan.scan_status || "scanned"}`) : ["No QR scans today."])} /></article>
+        <article className="vendor-panel"><PanelTitle title="Recent Refund Requests" right="Refunds" /><InfoList rows={(refunds.length ? refunds.slice(0, 5).map((refund) => `${refund.bookingCode || refund.bookingId || "Booking"} · Rs ${refund.amount || 0} · ${refund.refundStatus || refund.status || "pending"}`) : ["No refund requests waiting."])} /></article>
+      </section>
+
+      <section className="vendor-panel vendor-page-panel management-overview-panel">
+        <PanelTitle title="Management Overview" right="SaaS" />
+        <div className="management-grid">
+          <OverviewBlock title="Listings Summary" rows={[["Total", listings.length], ["Active", stats.activeListings || listings.filter((listing) => (listing.status || "active") === "active").length], ["Pending", stats.pendingApproval || 0]]} />
+          <OverviewBlock title="Schedule Summary" rows={[["Upcoming", stats.upcomingSchedules || schedules.length], ["Open", schedules.filter((show) => String(show.status || "").includes("open")).length], ["Draft", schedules.filter((show) => String(show.status || "").includes("draft")).length]]} />
+          <OverviewBlock title="Capacity Utilization" rows={[["Booked", stats.bookedSeats || 0], ["Available", stats.availableSeats || 0], ["Blocked", stats.blockedSeats || 0]]} />
+          <OverviewBlock title="Booking Status Distribution" rows={bookingStatusRows} />
+          <OverviewBlock title="Customer Statistics" rows={[["Total Customers", stats.totalCustomers || customers.length || 0], ["Repeat Customers", customers.filter((customer) => Number(customer.totalBookings || 0) > 1).length], ["New Today", stats.todayCustomers || 0]]} />
+        </div>
+      </section>
+
+      <section className="vendor-operations-grid">
+        <article className="vendor-panel quick-actions-panel"><PanelTitle title="Quick Actions" right="Tools" /><VendorQuickActions navigate={navigate} /></article>
+        <article className="vendor-panel"><PanelTitle title="Notification Center" right="Live" /><NotificationSummary notifications={notifications} bookings={bookings} refunds={refunds} schedules={schedules} /></article>
+      </section>
+
+      <section className="vendor-operations-grid">
+        <article className="vendor-panel"><PanelTitle title="QR Scanner Module" right="Today" /><OverviewBlock rows={scanRows} /><button className="vendor-primary-action" type="button" onClick={() => navigate("/vendor/qr-scanner")}>Scan QR Code</button></article>
+        <article className="vendor-panel movie-list-panel"><PanelTitle title="Top Selling Listings" right="All" /><MovieList movies={topListings} showValue /></article>
       </section>
     </>
   );
 }
 
 function MovieDashboard({ stats, movies, navigate }) {
+  const [selectedMovie, setSelectedMovie] = useState(null);
   const movieRevenue = movies.reduce((sum, movie) => sum + Number(movie.revenue || 0), 0) || stats.revenue || 0;
   const cards = [["Total Movies", movies.length], ["Total Shows", movies.reduce((sum, movie) => sum + (movie.showTimes?.length || (movie.showTime ? 1 : 0)), 0)], ["Total Bookings", stats.totalBookings || 0], ["Movie Revenue", `Rs ${movieRevenue}`]];
   return (
     <>
+      <section className="vendor-section-heading">
+        <h1>Movie Management Dashboard</h1>
+        <p>Movie-specific listings, schedules, seats, QR scans, pricing, refunds, staff, and status controls.</p>
+      </section>
       <section className="vendor-card-grid">{cards.map(([label, value]) => <article className="vendor-kpi-card" key={label}><div><p>{label}</p><h2>{value}</h2><span>Movie module</span></div></article>)}</section>
       <section className="vendor-operations-grid">
         <article className="vendor-panel quick-actions-panel"><PanelTitle title="Movie Quick Actions" /><MovieQuickActions navigate={navigate} /></article>
         <article className="vendor-panel movie-list-panel"><PanelTitle title="My Movies" /><MovieList movies={movies.slice(0, 5).map((movie, index) => ({ id: movie._id || index, title: movie.title, meta: `${movie.genre || "Movie"} · ${movie.language || ""}`, image: movie.image }))} /></article>
+      </section>
+      <section className="vendor-panel vendor-page-panel movie-card-panel">
+        <PanelTitle title="Movie Cards" right="Open" />
+        <div className="vendor-movie-card-grid">
+          {movies.map((movie) => (
+            <button className={`vendor-movie-card ${selectedMovie?._id === movie._id ? "active" : ""}`} key={movie._id || movie.title} type="button" onClick={() => setSelectedMovie(movie)}>
+              {movie.image || movie.posterUrl || movie.bannerUrl ? <img src={movie.image || movie.posterUrl || movie.bannerUrl} alt={movie.title} /> : <span className="vendor-movie-card-placeholder"><Film size={28} /></span>}
+              <strong>{movie.title || "Movie Name"}</strong>
+            </button>
+          ))}
+        </div>
+        {selectedMovie && (
+          <div className="movie-card-details">
+            <InfoGroup title={selectedMovie.title} rows={[["Language", selectedMovie.language], ["Theatre", selectedMovie.theatre || selectedMovie.theatreName], ["Screen", selectedMovie.screenName || selectedMovie.screenNumber], ["Show", selectedMovie.showTime || selectedMovie.showTimes?.[0]], ["Total Seats", selectedMovie.totalSeats], ["Regular", selectedMovie.regularSeats], ["Prime", selectedMovie.primeSeats], ["VIP", selectedMovie.vipSeats], ["Status", selectedMovie.status]]} />
+          </div>
+        )}
       </section>
       <section className="vendor-panel vendor-page-panel movie-production-panel">
         <PanelTitle title="Movie Production Modules" right="Movie" />
@@ -367,6 +449,10 @@ function MovieDashboard({ stats, movies, navigate }) {
 
 function DashboardMovieQuickActions({ navigate }) {
   return <div className="quick-action-grid"><button onClick={() => navigate("/vendor/add-movie")}>Add Movie</button><button onClick={() => navigate("/vendor/my-movies")}>My Movies</button><button onClick={() => navigate("/vendor/movies")}>Manage Shows</button><button onClick={() => navigate("/vendor/seat-management")}>Seat Management</button></div>;
+}
+
+function VendorQuickActions({ navigate }) {
+  return <div className="quick-action-grid"><button onClick={() => navigate("/vendor/movies")}>Add New Listing</button><button onClick={() => navigate("/vendor/theatres")}>Manage Schedules</button><button onClick={() => navigate("/vendor/seat-management")}>Manage Seats</button><button onClick={() => navigate("/vendor/qr-scanner")}>Scan QR Code</button><button onClick={() => navigate("/vendor/bookings")}>View Bookings</button><button onClick={() => navigate("/vendor/customers")}>Manage Customers</button></div>;
 }
 
 function MovieQuickActions({ navigate }) {
@@ -399,6 +485,15 @@ function MoviesPage({ movies, reload, navigate }) {
       reload();
     } catch (error) {
       alert(error.response?.data?.message || "Unable to delete movie");
+    }
+  };
+
+  const hideMovie = async (movie) => {
+    try {
+      await axios.patch(`${apiBase}/vendor/movies/${movie._id}/status`, { status: "hidden" }, auth());
+      reload();
+    } catch (error) {
+      alert(error.response?.data?.message || "Unable to hide movie");
     }
   };
 
@@ -511,7 +606,14 @@ function SeatManagementPage({ movies }) {
     showDate: selectedMovie?.showDate || selectedMovie?.releaseDate || "",
     showTime: selectedMovie?.showTime || selectedMovie?.showTimes?.[0] || "",
     totalSeats: selectedMovie?.totalSeats || 187,
+    regularSeats: selectedMovie?.regularSeats || 0,
+    primeSeats: selectedMovie?.primeSeats || 0,
+    vipSeats: selectedMovie?.vipSeats || 0,
+    blockedSeats: selectedMovie?.blockedSeats || 0,
     price: selectedMovie?.ticketPrice || 240,
+    regularSeatPrice: selectedMovie?.regularSeatPrice || selectedMovie?.ticketPrice || 240,
+    premiumSeatPrice: selectedMovie?.premiumSeatPrice || selectedMovie?.primeSeatPrice || selectedMovie?.ticketPrice || 240,
+    vipSeatPrice: selectedMovie?.vipSeatPrice || selectedMovie?.ticketPrice || 240,
   };
 
   const loadSeats = async () => {
@@ -979,6 +1081,41 @@ function DataTable({ title, columns, rows }) {
   return <section className="vendor-panel vendor-page-panel"><PanelTitle title={title} right="Live" /><div className="vendor-table-shell"><table className="vendor-table"><thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={`${index}-${cellIndex}`}>{cell || "-"}</td>)}</tr>) : <tr><td colSpan={columns.length}>No data available yet.</td></tr>}</tbody></table></div></section>;
 }
 
+function CategorySales({ stats, bookings }) {
+  const counts = bookings.reduce((acc, booking) => {
+    const key = normalizeService(booking.module || "other");
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const source = Object.keys(stats.moduleCounts || {}).length ? stats.moduleCounts : counts;
+  const moduleKey = (service) => ({ movies: "movie", flights: "flight", hotels: "hotel", events: "event", travel: "travel-package" }[service] || service);
+  const rows = commonServices.filter((service) => service !== "all").map((service) => [serviceMeta[service]?.label || service, source[service] || source[moduleKey(service)] || 0]);
+  return <div className="category-sales">{rows.map(([label, value]) => <p key={label}><span>{label}</span><strong>{value}</strong></p>)}</div>;
+}
+
+function PerformanceOverview({ stats }) {
+  return (
+    <div className="performance-overview">
+      <div className="flight-seat-summary"><span style={{ "--value": `${occupancy(stats)}%` }} /><p>Capacity Utilization</p><strong>{occupancy(stats)}%</strong></div>
+      <OverviewBlock rows={[["Monthly Revenue", `Rs ${stats.monthlyRevenue || 0}`], ["Today Revenue", `Rs ${stats.todayRevenue || 0}`], ["Vendor Earnings", `Rs ${stats.vendorEarnings || 0}`]]} />
+    </div>
+  );
+}
+
+function OverviewBlock({ title, rows }) {
+  return <div className="overview-block">{title && <h3>{title}</h3>}{rows.map(([label, value]) => <p key={label}><span>{label}</span><strong>{value || 0}</strong></p>)}</div>;
+}
+
+function NotificationSummary({ notifications, bookings, refunds, schedules }) {
+  const rows = [
+    ["New Bookings", bookings.filter((booking) => isToday(booking.createdAt)).length],
+    ["Schedule Updates", schedules.length],
+    ["Refund Requests", refunds.length],
+    ["System Notifications", notifications.length],
+  ];
+  return <OverviewBlock rows={rows} />;
+}
+
 function MiniCount({ label, value }) {
   return <article className="vendor-kpi-card"><div><p>{label}</p><h2>{value || 0}</h2><span>Production module</span></div></article>;
 }
@@ -1025,6 +1162,15 @@ function normalizeService(module) {
   if (value === "event") return "events";
   if (value === "travel-package") return "travel";
   return value;
+}
+
+function normalizeStatus(booking) {
+  return String(booking?.bookingStatus || booking?.status || booking?.paymentStatus || "").toLowerCase();
+}
+
+function isToday(value) {
+  if (!value) return false;
+  return new Date(value).toDateString() === new Date().toDateString();
 }
 
 function LineChart({ values }) {

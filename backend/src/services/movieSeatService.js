@@ -33,42 +33,71 @@ const mapSeat = (row) => ({
   updatedAt: row.updated_at,
 });
 
-const seatSections = [
-  { label: "Recliner Rows", seatType: "recliner", rows: 2, seatsPerRow: 8, priceField: "vipSeatPrice" },
-  { label: "Prime Plus Rows", seatType: "prime_plus", rows: 2, seatsPerRow: 10, priceField: "premiumSeatPrice" },
-  { label: "Prime Rows", seatType: "prime", rows: 99, seatsPerRow: 12, priceField: "regularSeatPrice" },
-];
+const rowNameFromIndex = (index) => {
+  let value = Number(index);
+  let name = "";
+  do {
+    name = String.fromCharCode(65 + (value % 26)) + name;
+    value = Math.floor(value / 26) - 1;
+  } while (value >= 0);
+  return name;
+};
 
 const buildSeatLayout = (context = {}, movie = null) => {
   const total = Math.max(Number(context.totalSeats || movie?.totalSeats || 0), 1);
+  const vipCount = Math.min(Number(context.vipSeats ?? movie?.vipSeats ?? 0), total);
+  const primeCount = Math.min(Number(context.primeSeats ?? movie?.primeSeats ?? 0), Math.max(total - vipCount, 0));
+  const regularCount = Math.max(total - vipCount - primeCount, 0);
+  const blockedLimit = Math.min(Number(context.blockedSeats ?? movie?.blockedSeats ?? 0), total);
   const prices = {
-    recliner: Number(context.vipSeatPrice || movie?.vipSeatPrice || context.price || movie?.ticketPrice || 0),
-    prime_plus: Number(context.premiumSeatPrice || movie?.premiumSeatPrice || context.price || movie?.ticketPrice || 0),
-    prime: Number(context.regularSeatPrice || movie?.regularSeatPrice || context.price || movie?.ticketPrice || 0),
+    vip: Number(context.vipSeatPrice || movie?.vipSeatPrice || context.price || movie?.ticketPrice || 0),
+    prime: Number(context.premiumSeatPrice || context.primeSeatPrice || movie?.premiumSeatPrice || movie?.primeSeatPrice || context.price || movie?.ticketPrice || 0),
+    regular: Number(context.regularSeatPrice || movie?.regularSeatPrice || context.price || movie?.ticketPrice || 0),
   };
+  const seatSections = [
+    { seatType: "vip", count: vipCount, seatsPerRow: 10 },
+    { seatType: "prime", count: primeCount, seatsPerRow: 10 },
+    { seatType: "regular", count: regularCount, seatsPerRow: 10 },
+  ];
   const seats = [];
   let rowIndex = 0;
+  let blockedCreated = 0;
 
   for (const section of seatSections) {
-    for (let sectionRow = 0; sectionRow < section.rows && seats.length < total; sectionRow += 1) {
-      const rowName = String.fromCharCode(65 + rowIndex);
-      const seatsInRow = Math.min(section.seatsPerRow, total - seats.length);
+    for (let sectionCreated = 0; sectionCreated < section.count && seats.length < total;) {
+      const rowName = rowNameFromIndex(rowIndex);
+      const seatsInRow = Math.min(section.seatsPerRow, section.count - sectionCreated, total - seats.length);
       for (let seatIndex = 1; seatIndex <= seatsInRow; seatIndex += 1) {
         const seatNumber = String(seatIndex).padStart(2, "0");
+        const isBlocked = blockedCreated < blockedLimit;
+        if (isBlocked) blockedCreated += 1;
         seats.push({
           rowName,
           seatNumber,
           seatNo: `${rowName}${seatNumber}`,
           seatType: section.seatType,
           price: prices[section.seatType],
-          status: "available",
+          status: isBlocked ? "blocked" : "available",
         });
       }
+      sectionCreated += seatsInRow;
       rowIndex += 1;
     }
   }
 
   return seats;
+};
+
+const seatLayoutMatches = (existingSeats, desiredSeats) => {
+  if (existingSeats.length !== desiredSeats.length) return false;
+  const counts = (seats) => seats.reduce((acc, seat) => {
+    const type = String(seat.seat_type || seat.seatType || "").toLowerCase();
+    acc[type] = (acc[type] || 0) + 1;
+    return acc;
+  }, {});
+  const existingCounts = counts(existingSeats);
+  const desiredCounts = counts(desiredSeats);
+  return ["vip", "prime", "regular"].every((type) => existingCounts[type] === desiredCounts[type]);
 };
 
 const ensureShowSeats = async (context = {}) => {
@@ -78,6 +107,15 @@ const ensureShowSeats = async (context = {}) => {
 
   const movie = context.movieId ? await Movie.findById(context.movieId) : null;
   const seats = buildSeatLayout(context, movie);
+  const [existingSeats] = await pool.query("SELECT seat_no, seat_type, status FROM seats WHERE show_id = ?", [showId]);
+
+  if (existingSeats.length && !seatLayoutMatches(existingSeats, seats)) {
+    const hasBookedSeats = existingSeats.some((seat) => seat.status === "booked");
+    if (!hasBookedSeats) {
+      await pool.query("DELETE FROM seats WHERE show_id = ?", [showId]);
+    }
+  }
+
   const values = seats.map((seat) => [
     seat.rowName,
     seat.seatNumber,
@@ -88,11 +126,12 @@ const ensureShowSeats = async (context = {}) => {
     context.screenId || "Screen 1",
     seat.seatType,
     seat.price,
+    seat.status,
   ]);
 
   await pool.query(
     `INSERT IGNORE INTO seats (
-      row_name, seat_number, seat_no, show_id, movie_id, theatre_id, screen_id, seat_type, price
+      row_name, seat_number, seat_no, show_id, movie_id, theatre_id, screen_id, seat_type, price, status
     ) VALUES ?`,
     [values]
   );

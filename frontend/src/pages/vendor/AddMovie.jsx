@@ -1,17 +1,47 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import axios from "axios";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./AddMovie.css";
 
 const getToken = () =>
-  localStorage.getItem("token") ||
-  sessionStorage.getItem("token");
+  localStorage.getItem("token") || sessionStorage.getItem("token");
 
 const languageOptions = ["Hindi", "English", "Marathi", "Tamil", "Telugu", "Malayalam", "Kannada", "Punjabi", "Bengali"];
 const genreOptions = ["Action", "Comedy", "Drama", "Thriller", "Horror", "Romance", "Adventure", "Sci-Fi", "Family", "Animation"];
 const certificateOptions = ["U", "U-A", "A"];
 const movieStatuses = ["draft", "upcoming", "booking_open", "now_showing", "house_full", "ended", "cancelled"];
 const documentTypes = ["Movie Permission Document", "Distributor Agreement", "Theatre Agreement", "Government Certificate", "Other Supporting Documents"];
+
+const steps = [
+  "Basic Info",
+  "Media",
+  "Show Details",
+  "Seat Setup",
+  "Story",
+  "Cast & Crew",
+  "Documents",
+  "Review",
+];
+
+const stepSections = {
+  0: ["Basic Info", "Movie Details", "Theatre Details", "Screen Details"],
+  1: ["Media"],
+  2: ["Show Details"],
+  3: ["Seat Setup"],
+  4: ["Story"],
+  5: ["Cast & Crew"],
+  6: ["Documents"],
+  7: ["Review"],
+};
+
+const emptyScreen = {
+  screenName: "",
+  screenType: "2D",
+  totalSeats: 400,
+  regularSeats: 200,
+  primeSeats: 100,
+  vipSeats: 100,
+};
 
 const emptyMovie = {
   title: "",
@@ -25,17 +55,24 @@ const emptyMovie = {
   documents: [],
   description: "",
   theatre: "",
-  screenName: "",
   city: "",
   location: "",
+  address: "",
+  screens: [emptyScreen],
+  selectedScreenIndex: 0,
   showDate: "",
   showTime: "",
   endTime: "",
-  totalSeats: 120,
-  ticketPrice: 250,
-  regularSeatPrice: 250,
-  premiumSeatPrice: 350,
-  vipSeatPrice: 500,
+  totalSeats: 400,
+  regularSeats: 200,
+  primeSeats: 100,
+  vipSeats: 100,
+  bookedSeats: 0,
+  blockedSeats: 0,
+  ticketPrice: 150,
+  regularSeatPrice: 150,
+  primeSeatPrice: 250,
+  vipSeatPrice: 400,
   genre: "Action",
   cast: "",
   director: "",
@@ -47,32 +84,70 @@ const emptyMovie = {
   interestCount: "",
   aboutMovie: "",
   status: "draft",
-  seatLayout: [],
   isOfferApplicable: false,
   offers: [],
   castMembers: [],
   crewMembers: [],
 };
 
-const readFile = (file) => new Promise((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve({ name: file.name, type: file.type, size: file.size, data: reader.result });
-  reader.onerror = reject;
-  reader.readAsDataURL(file);
-});
+const toNumber = (value) => Math.max(Number(value || 0), 0);
+
+const readFile = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      resolve({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        data: reader.result,
+      });
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+const generateSeatLayout = (movie) => {
+  const createSeats = (count, prefix, type, price) =>
+    Array.from({ length: toNumber(count) }, (_, index) => ({
+      seatNo: `${prefix}${index + 1}`,
+      type,
+      status: "available",
+      price: toNumber(price),
+    }));
+
+  return {
+    totalSeats: toNumber(movie.totalSeats),
+    regularSeats: toNumber(movie.regularSeats),
+    primeSeats: toNumber(movie.primeSeats),
+    vipSeats: toNumber(movie.vipSeats),
+    bookedSeats: [],
+    blockedSeats: [],
+    seats: [
+      ...createSeats(movie.regularSeats, "A", "regular", movie.regularSeatPrice),
+      ...createSeats(movie.primeSeats, "P", "prime", movie.primeSeatPrice),
+      ...createSeats(movie.vipSeats, "V", "vip", movie.vipSeatPrice),
+    ],
+  };
+};
 
 function AddMovie() {
   const navigate = useNavigate();
   const location = useLocation();
   const editMovie = location.state?.movie;
 
+  const [activeStep, setActiveStep] = useState(0);
+  const [activeSection, setActiveSection] = useState("");
+
   const [movie, setMovie] = useState({
     ...emptyMovie,
     ...(editMovie || {}),
+    screens: editMovie?.screens?.length ? editMovie.screens : [emptyScreen],
+    selectedScreenIndex: editMovie?.selectedScreenIndex || 0,
     offers: editMovie?.offers?.length ? editMovie.offers : [],
     castMembers: editMovie?.castMembers?.length ? editMovie.castMembers : [],
     crewMembers: editMovie?.crewMembers?.length ? editMovie.crewMembers : [],
   });
+
   const [uploads, setUploads] = useState({
     poster: null,
     banner: null,
@@ -81,10 +156,90 @@ function AddMovie() {
     documents: [],
   });
 
+  const selectedScreen = movie.screens?.[movie.selectedScreenIndex] || emptyScreen;
+
+  const screenSeatTotal = useMemo(
+    () =>
+      toNumber(selectedScreen.regularSeats) +
+      toNumber(selectedScreen.primeSeats) +
+      toNumber(selectedScreen.vipSeats),
+    [selectedScreen]
+  );
+
+  const seatError = useMemo(() => {
+    if (screenSeatTotal > toNumber(selectedScreen.totalSeats)) {
+      return "Regular + Prime + VIP seats cannot be greater than Total Seats.";
+    }
+
+    if (toNumber(movie.bookedSeats) > toNumber(selectedScreen.totalSeats)) {
+      return "Booked Seats cannot be greater than Total Seats.";
+    }
+
+    if (toNumber(movie.blockedSeats) > toNumber(selectedScreen.totalSeats)) {
+      return "Blocked Seats cannot be greater than Total Seats.";
+    }
+
+    return "";
+  }, [screenSeatTotal, selectedScreen, movie.bookedSeats, movie.blockedSeats]);
+
+  const availableSeats =
+    toNumber(selectedScreen.totalSeats) -
+    toNumber(movie.bookedSeats) -
+    toNumber(movie.blockedSeats);
+
   const updateField = (field, value) => {
+    setMovie((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateScreen = (index, field, value) => {
     setMovie((current) => ({
       ...current,
-      [field]: value,
+      screens: current.screens.map((screen, screenIndex) =>
+        screenIndex === index ? { ...screen, [field]: value } : screen
+      ),
+    }));
+  };
+
+  const addScreen = () => {
+    setMovie((current) => ({
+      ...current,
+      screens: [
+        ...(current.screens || []),
+        {
+          screenName: `Screen ${current.screens.length + 1}`,
+          screenType: "2D",
+          totalSeats: 250,
+          regularSeats: 150,
+          primeSeats: 70,
+          vipSeats: 30,
+        },
+      ],
+    }));
+  };
+
+  const removeScreen = (index) => {
+    setMovie((current) => {
+      const updatedScreens = current.screens.filter((_, i) => i !== index);
+      return {
+        ...current,
+        screens: updatedScreens.length ? updatedScreens : [emptyScreen],
+        selectedScreenIndex: 0,
+      };
+    });
+  };
+
+  const selectScreenForShow = (index) => {
+    const screen = movie.screens[index];
+
+    setMovie((current) => ({
+      ...current,
+      selectedScreenIndex: index,
+      totalSeats: screen.totalSeats,
+      regularSeats: screen.regularSeats,
+      primeSeats: screen.primeSeats,
+      vipSeats: screen.vipSeats,
+      screenName: screen.screenName,
+      format: screen.screenType,
     }));
   };
 
@@ -111,8 +266,40 @@ function AddMovie() {
     }));
   };
 
+  const nextStep = () => {
+    if (activeStep === 3 && seatError) {
+      alert(seatError);
+      return;
+    }
+
+    setActiveSection("");
+    setActiveStep((current) => Math.min(current + 1, steps.length - 1));
+  };
+
+  const prevStep = () => {
+    setActiveSection("");
+    setActiveStep((current) => Math.max(current - 1, 0));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (seatError) {
+      alert(seatError);
+      setActiveStep(3);
+      setActiveSection("Seat Setup");
+      return;
+    }
+
+    const finalMovie = {
+      ...movie,
+      totalSeats: selectedScreen.totalSeats,
+      regularSeats: selectedScreen.regularSeats,
+      primeSeats: selectedScreen.primeSeats,
+      vipSeats: selectedScreen.vipSeats,
+      screenName: selectedScreen.screenName,
+      format: selectedScreen.screenType,
+    };
 
     const config = {
       headers: {
@@ -127,14 +314,20 @@ function AddMovie() {
         banner: uploads.banner ? await readFile(uploads.banner) : null,
         gallery: await Promise.all((uploads.gallery || []).map(readFile)),
         trailer: uploads.trailer ? await readFile(uploads.trailer) : null,
-        documents: await Promise.all((uploads.documents || []).filter((item) => item.file).map(async (item) => ({
-          documentType: item.documentType,
-          file: await readFile(item.file),
-        }))),
+        documents: await Promise.all(
+          (uploads.documents || [])
+            .filter((item) => item.file)
+            .map(async (item) => ({
+              documentType: item.documentType,
+              file: await readFile(item.file),
+            }))
+        ),
       };
+
       const payload = {
-        ...movie,
-        ticketPrice: movie.regularSeatPrice || movie.ticketPrice,
+        ...finalMovie,
+        ticketPrice: finalMovie.regularSeatPrice || finalMovie.ticketPrice,
+        premiumSeatPrice: finalMovie.primeSeatPrice,
         uploads: uploadPayload,
       };
 
@@ -156,143 +349,347 @@ function AddMovie() {
     }
   };
 
+  const renderSectionContent = (section) => {
+    if (section === "Basic Info") {
+      return (
+        <div className="form-grid">
+          <Field label="Movie Name" value={movie.title} onChange={(value) => updateField("title", value)} required />
+          <SelectField label="Language" value={movie.language} options={languageOptions} onChange={(value) => updateField("language", value)} required />
+          <Field label="Duration" value={movie.duration} onChange={(value) => updateField("duration", value)} placeholder="2h 46m" required />
+          <SelectField label="Genre" value={movie.genre} options={genreOptions} onChange={(value) => updateField("genre", value)} required />
+        </div>
+      );
+    }
+
+    if (section === "Movie Details") {
+      return (
+        <div className="form-grid">
+          <SelectField label="Certificate" value={movie.certificate} options={certificateOptions} onChange={(value) => updateField("certificate", value)} />
+          <Field label="Release Date" type="date" value={movie.releaseDate} onChange={(value) => updateField("releaseDate", value)} required />
+          <SelectField label="Movie Status" value={movie.status} options={movieStatuses} onChange={(value) => updateField("status", value)} />
+          <Field label="Interested Count" value={movie.interestCount} onChange={(value) => updateField("interestCount", value)} placeholder="11.3K+ are interested" />
+        </div>
+      );
+    }
+
+    if (section === "Theatre Details") {
+      return (
+        <div className="form-grid">
+          <Field label="Theatre Name" value={movie.theatre} onChange={(value) => updateField("theatre", value)} required />
+          <Field label="City" value={movie.city} onChange={(value) => updateField("city", value)} required />
+          <Field
+            label="Address"
+            value={movie.address || movie.location}
+            onChange={(value) => {
+              updateField("address", value);
+              updateField("location", value);
+            }}
+            required
+          />
+        </div>
+      );
+    }
+
+    if (section === "Screen Details") {
+      return (
+        <div className="screen-editor">
+          <div className="screen-editor-top">
+            <p>One theatre can have multiple screens.</p>
+            <button type="button" onClick={addScreen}>Add Screen</button>
+          </div>
+
+          {(movie.screens || []).map((screen, index) => {
+            const total =
+              toNumber(screen.regularSeats) +
+              toNumber(screen.primeSeats) +
+              toNumber(screen.vipSeats);
+
+            const mismatch = total > toNumber(screen.totalSeats);
+
+            return (
+              <div className="screen-box" key={`screen-${index}`}>
+                <div className="screen-box-head">
+                  <h3>Screen {index + 1}</h3>
+                  {movie.screens.length > 1 && (
+                    <button type="button" onClick={() => removeScreen(index)}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                <div className="form-grid">
+                  <Field label="Screen Name" value={screen.screenName} onChange={(value) => updateScreen(index, "screenName", value)} required />
+                  <Field label="Screen Type" value={screen.screenType} onChange={(value) => updateScreen(index, "screenType", value)} placeholder="2D / 3D / IMAX" />
+                  <Field label="Total Seats" type="number" value={screen.totalSeats} onChange={(value) => updateScreen(index, "totalSeats", value)} required />
+                  <Field label="Regular Seats" type="number" value={screen.regularSeats} onChange={(value) => updateScreen(index, "regularSeats", value)} required />
+                  <Field label="Prime Seats" type="number" value={screen.primeSeats} onChange={(value) => updateScreen(index, "primeSeats", value)} required />
+                  <Field label="VIP Seats" type="number" value={screen.vipSeats} onChange={(value) => updateScreen(index, "vipSeats", value)} required />
+                </div>
+
+                <div className={`screen-total ${mismatch ? "error" : "success"}`}>
+                  Total Seats: {screen.totalSeats} | Regular + Prime + VIP: {total}
+                  {total < toNumber(screen.totalSeats) ? " | Remaining seats become Regular" : ""}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    if (section === "Show Details") {
+      return (
+        <div className="form-grid">
+          <Field label="Show Date" type="date" value={movie.showDate} onChange={(value) => updateField("showDate", value)} required />
+          <Field label="Show Time" type="time" value={movie.showTime} onChange={(value) => updateField("showTime", value)} required />
+          <Field label="End Time" type="time" value={movie.endTime} onChange={(value) => updateField("endTime", value)} />
+          <SelectField label="Select Theatre" value={movie.theatre} options={[movie.theatre || "Add Theatre First"]} onChange={(value) => updateField("theatre", value)} />
+
+          <div className="form-group">
+            <label>Select Screen</label>
+            <select value={movie.selectedScreenIndex} onChange={(e) => selectScreenForShow(Number(e.target.value))}>
+              {(movie.screens || []).map((screen, index) => (
+                <option key={`select-screen-${index}`} value={index}>
+                  {screen.screenName || `Screen ${index + 1}`} - {screen.totalSeats} Seats
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      );
+    }
+
+    if (section === "Seat Setup") {
+      return (
+        <div className="seat-setup-grid">
+          <p className="seat-setup-help">
+            Seat setup is taken from selected screen: <b>{selectedScreen.screenName || "Screen 1"}</b>
+          </p>
+
+          <div className="seat-summary">
+            <span>Total <b>{toNumber(selectedScreen.totalSeats)}</b></span>
+            <span>Regular <b>{toNumber(selectedScreen.regularSeats)}</b></span>
+            <span>Prime <b>{toNumber(selectedScreen.primeSeats)}</b></span>
+            <span>VIP <b>{toNumber(selectedScreen.vipSeats)}</b></span>
+            <span>Available <b>{Math.max(availableSeats, 0)}</b></span>
+          </div>
+
+          <div className="form-grid">
+            <Field label="Regular Price" type="number" value={movie.regularSeatPrice} onChange={(value) => updateField("regularSeatPrice", value)} required />
+            <Field label="Prime Price" type="number" value={movie.primeSeatPrice} onChange={(value) => updateField("primeSeatPrice", value)} required />
+            <Field label="VIP Price" type="number" value={movie.vipSeatPrice} onChange={(value) => updateField("vipSeatPrice", value)} required />
+            <Field label="Booked Seats" type="number" value={movie.bookedSeats} onChange={(value) => updateField("bookedSeats", value)} />
+            <Field label="Blocked Seats" type="number" value={movie.blockedSeats} onChange={(value) => updateField("blockedSeats", value)} />
+          </div>
+
+          {seatError && <p className="seat-error">{seatError}</p>}
+
+          <SeatPreview
+            movie={{
+              ...movie,
+              totalSeats: selectedScreen.totalSeats,
+              regularSeats: selectedScreen.regularSeats,
+              primeSeats: selectedScreen.primeSeats,
+              vipSeats: selectedScreen.vipSeats,
+            }}
+          />
+        </div>
+      );
+    }
+
+    if (section === "Media") {
+      return (
+        <>
+          <div className="file-grid">
+            <FileField label="Movie Poster Upload" accept="image/*" onChange={(file) => setUploads((current) => ({ ...current, poster: file }))} />
+            <FileField label="Movie Banner Upload" accept="image/*" onChange={(file) => setUploads((current) => ({ ...current, banner: file }))} />
+            <FileField label="Movie Gallery Images Upload" accept="image/*" multiple onChange={(files) => setUploads((current) => ({ ...current, gallery: files }))} />
+            <FileField label="Trailer Upload" accept="video/*" onChange={(file) => setUploads((current) => ({ ...current, trailer: file }))} />
+          </div>
+
+          <Field label="Poster URL Fallback" value={movie.image} onChange={(value) => updateField("image", value)} />
+          <Field label="Banner URL Fallback" value={movie.bannerUrl} onChange={(value) => updateField("bannerUrl", value)} />
+          <Field label="Trailer URL Optional" value={movie.trailerUrl} onChange={(value) => updateField("trailerUrl", value)} />
+
+          {(movie.image || movie.posterUrl) && (
+            <div className="poster-preview">
+              <img src={movie.posterUrl || movie.image} alt="Poster" />
+            </div>
+          )}
+        </>
+      );
+    }
+
+    if (section === "Story") {
+      return (
+        <>
+          <TextArea label="Short Description" value={movie.description} onChange={(value) => updateField("description", value)} />
+          <TextArea label="About Movie" value={movie.aboutMovie} onChange={(value) => updateField("aboutMovie", value)} />
+          <div className="form-grid">
+            <Field label="Hero / Lead" value={movie.hero} onChange={(value) => updateField("hero", value)} />
+            <Field label="Legacy Cast Text" value={movie.cast} onChange={(value) => updateField("cast", value)} />
+            <Field label="Director" value={movie.director} onChange={(value) => updateField("director", value)} />
+          </div>
+        </>
+      );
+    }
+
+    if (section === "Cast & Crew") {
+      return (
+        <>
+          <PeopleEditor
+            title="Cast with Photos"
+            addLabel="Add Cast"
+            items={movie.castMembers}
+            onAdd={() => addListItem("castMembers", { name: "", role: "Actor", photo: "" })}
+            onUpdate={(index, key, value) => updateListItem("castMembers", index, key, value)}
+            onRemove={(index) => removeListItem("castMembers", index)}
+          />
+
+          <PeopleEditor
+            title="Crew"
+            addLabel="Add Crew"
+            items={movie.crewMembers}
+            onAdd={() => addListItem("crewMembers", { name: "", role: "Director", photo: "" })}
+            onUpdate={(index, key, value) => updateListItem("crewMembers", index, key, value)}
+            onRemove={(index) => removeListItem("crewMembers", index)}
+          />
+        </>
+      );
+    }
+
+    if (section === "Documents") {
+      return (
+        <>
+          <DocumentEditor
+            documents={uploads.documents}
+            onChange={(documents) =>
+              setUploads((current) => ({ ...current, documents }))
+            }
+          />
+
+          <div className="section-editor inner-section">
+            <div className="section-editor-top">
+              <div>
+                <h2>Offers</h2>
+                <label className="offer-toggle">
+                  <input
+                    type="checkbox"
+                    checked={movie.isOfferApplicable}
+                    onChange={(e) => updateField("isOfferApplicable", e.target.checked)}
+                  />
+                  Offer is applicable
+                </label>
+              </div>
+
+              <button type="button" onClick={() => addListItem("offers", { title: "", description: "" })}>
+                Add Offer
+              </button>
+            </div>
+
+            {(movie.offers || []).map((offer, index) => (
+              <div className="repeat-row offer-row" key={`offer-${index}`}>
+                <input type="text" placeholder="Offer title" value={offer.title} onChange={(e) => updateListItem("offers", index, "title", e.target.value)} />
+                <input type="text" placeholder="Offer description" value={offer.description} onChange={(e) => updateListItem("offers", index, "description", e.target.value)} />
+                <button type="button" onClick={() => removeListItem("offers", index)}>Remove</button>
+              </div>
+            ))}
+          </div>
+        </>
+      );
+    }
+
+    if (section === "Review") {
+      return (
+        <div className="seat-summary review-summary">
+          <span>Movie <b>{movie.title || "-"}</b></span>
+          <span>Theatre <b>{movie.theatre || "-"}</b></span>
+          <span>Screen <b>{selectedScreen.screenName || "-"}</b></span>
+          <span>Total Seats <b>{toNumber(selectedScreen.totalSeats)}</b></span>
+          <span>Regular <b>{toNumber(selectedScreen.regularSeats)}</b></span>
+          <span>Prime <b>{toNumber(selectedScreen.primeSeats)}</b></span>
+          <span>VIP <b>{toNumber(selectedScreen.vipSeats)}</b></span>
+          <span>City <b>{movie.city || "-"}</b></span>
+          <span>Status <b>{movie.status}</b></span>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <div className="add-movie-page">
       <div className="add-movie-container">
         <div className="add-movie-top">
           <h1>{editMovie ? "Edit Movie" : "Add New Movie"}</h1>
-          <p>Configure the complete movie detail page shown to customers.</p>
+          <p>Complete movie setup step by step.</p>
         </div>
 
-        <div className="add-movie-card">
-          <form className="add-movie-form" onSubmit={handleSubmit}>
-            <div className="form-grid">
-              <Field label="Movie Name" value={movie.title} onChange={(value) => updateField("title", value)} required />
-              <SelectField label="Language" value={movie.language} options={languageOptions} onChange={(value) => updateField("language", value)} required />
-              <Field label="Duration" value={movie.duration} onChange={(value) => updateField("duration", value)} placeholder="2h 46m" required />
-              <SelectField label="Genre" value={movie.genre} options={genreOptions} onChange={(value) => updateField("genre", value)} required />
-              <SelectField label="Certificate" value={movie.certificate} options={certificateOptions} onChange={(value) => updateField("certificate", value)} />
-              <Field label="Format" value={movie.format} onChange={(value) => updateField("format", value)} placeholder="2D" />
-              <Field label="Release Date" type="date" value={movie.releaseDate} onChange={(value) => updateField("releaseDate", value)} required />
-              <SelectField label="Movie Status" value={movie.status} options={movieStatuses} onChange={(value) => updateField("status", value)} />
-              <Field label="Trailer URL Optional" value={movie.trailerUrl} onChange={(value) => updateField("trailerUrl", value)} />
-              <Field label="Theatre Name" value={movie.theatre} onChange={(value) => updateField("theatre", value)} required />
-              <Field label="Screen Name" value={movie.screenName} onChange={(value) => updateField("screenName", value)} required />
-              <Field label="City" value={movie.city} onChange={(value) => updateField("city", value)} required />
-              <Field label="Location" value={movie.location} onChange={(value) => updateField("location", value)} />
-              <Field label="Show Date" type="date" value={movie.showDate} onChange={(value) => updateField("showDate", value)} />
-              <Field label="Show Time" type="time" value={movie.showTime} onChange={(value) => updateField("showTime", value)} />
-              <Field label="End Time" type="time" value={movie.endTime} onChange={(value) => updateField("endTime", value)} />
-              <Field label="Total Seats" type="number" value={movie.totalSeats} onChange={(value) => updateField("totalSeats", value)} required />
-              <Field label="Regular Seat Price" type="number" value={movie.regularSeatPrice} onChange={(value) => updateField("regularSeatPrice", value)} required />
-              <Field label="Premium Seat Price" type="number" value={movie.premiumSeatPrice} onChange={(value) => updateField("premiumSeatPrice", value)} />
-              <Field label="VIP Seat Price" type="number" value={movie.vipSeatPrice} onChange={(value) => updateField("vipSeatPrice", value)} />
-              <Field label="Interested Count" value={movie.interestCount} onChange={(value) => updateField("interestCount", value)} placeholder="11.3K+ are interested" />
-              <Field label="Hero / Lead" value={movie.hero} onChange={(value) => updateField("hero", value)} />
-              <Field label="Legacy Cast Text" value={movie.cast} onChange={(value) => updateField("cast", value)} />
-              <Field label="Director" value={movie.director} onChange={(value) => updateField("director", value)} />
+        <div className="add-movie-stepper">
+          {steps.map((step, index) => (
+            <div
+              className={`stepper-item ${activeStep === index ? "active" : ""} ${activeStep > index ? "completed" : ""}`}
+              key={step}
+              onClick={() => {
+                setActiveStep(index);
+                setActiveSection("");
+              }}
+            >
+              <div className="stepper-circle">{index + 1}</div>
+              <p>{step}</p>
+              {index !== steps.length - 1 && <div className="stepper-line" />}
             </div>
+          ))}
+        </div>
 
-            <div className="section-editor">
-              <div className="section-editor-top">
-                <h2>Image & File Storage</h2>
-              </div>
-              <div className="file-grid">
-                <FileField label="Movie Poster Upload" accept="image/*" onChange={(file) => setUploads((current) => ({ ...current, poster: file }))} />
-                <FileField label="Movie Banner Upload" accept="image/*" onChange={(file) => setUploads((current) => ({ ...current, banner: file }))} />
-                <FileField label="Movie Gallery Images Upload" accept="image/*" multiple onChange={(files) => setUploads((current) => ({ ...current, gallery: files }))} />
-                <FileField label="Trailer Upload" accept="video/*" onChange={(file) => setUploads((current) => ({ ...current, trailer: file }))} />
-              </div>
-              <Field label="Poster URL Fallback" value={movie.image} onChange={(value) => updateField("image", value)} />
-              <Field label="Banner URL Fallback" value={movie.bannerUrl} onChange={(value) => updateField("bannerUrl", value)} />
-            </div>
+        <form className="add-movie-form" onSubmit={handleSubmit}>
+          <div className="add-movie-card accordion-card">
+            {stepSections[activeStep].map((section) => (
+              <AccordionItem
+                key={section}
+                title={section}
+                isOpen={activeSection === section}
+                onClick={() =>
+                  setActiveSection(activeSection === section ? "" : section)
+                }
+              >
+                {renderSectionContent(section)}
+              </AccordionItem>
+            ))}
 
-            {(movie.image || movie.posterUrl) && (
-              <div className="poster-preview">
-                <img src={movie.posterUrl || movie.image} alt="Poster" />
-              </div>
-            )}
-
-            <TextArea label="Short Description" value={movie.description} onChange={(value) => updateField("description", value)} />
-            <TextArea label="About Movie" value={movie.aboutMovie} onChange={(value) => updateField("aboutMovie", value)} />
-
-            <div className="section-editor">
-              <div className="section-editor-top">
-                <h2>Seat Layout Generator</h2>
-              </div>
-              <SeatPreview
-                totalSeats={movie.totalSeats}
-                regularSeatPrice={movie.regularSeatPrice}
-                premiumSeatPrice={movie.premiumSeatPrice}
-                vipSeatPrice={movie.vipSeatPrice}
-              />
-            </div>
-
-            <DocumentEditor documents={uploads.documents} onChange={(documents) => setUploads((current) => ({ ...current, documents }))} />
-
-            <PeopleEditor
-              title="Cast with Photos"
-              addLabel="Add Cast"
-              items={movie.castMembers}
-              onAdd={() => addListItem("castMembers", { name: "", role: "Actor", photo: "" })}
-              onUpdate={(index, key, value) => updateListItem("castMembers", index, key, value)}
-              onRemove={(index) => removeListItem("castMembers", index)}
-            />
-
-            <PeopleEditor
-              title="Crew"
-              addLabel="Add Crew"
-              items={movie.crewMembers}
-              onAdd={() => addListItem("crewMembers", { name: "", role: "Director", photo: "" })}
-              onUpdate={(index, key, value) => updateListItem("crewMembers", index, key, value)}
-              onRemove={(index) => removeListItem("crewMembers", index)}
-            />
-
-            <div className="section-editor">
-              <div className="section-editor-top">
-                <div>
-                  <h2>Offers</h2>
-                  <label className="offer-toggle">
-                    <input
-                      type="checkbox"
-                      checked={movie.isOfferApplicable}
-                      onChange={(e) => updateField("isOfferApplicable", e.target.checked)}
-                    />
-                    Offer is applicable
-                  </label>
-                </div>
-                <button type="button" onClick={() => addListItem("offers", { title: "", description: "" })}>
-                  Add Offer
+            <div className="step-actions">
+              {activeStep > 0 && (
+                <button type="button" className="step-btn secondary" onClick={prevStep}>
+                  Back
                 </button>
-              </div>
+              )}
 
-              {(movie.offers || []).map((offer, index) => (
-                <div className="repeat-row offer-row" key={`offer-${index}`}>
-                  <input
-                    type="text"
-                    placeholder="Offer title"
-                    value={offer.title}
-                    onChange={(e) => updateListItem("offers", index, "title", e.target.value)}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Offer description"
-                    value={offer.description}
-                    onChange={(e) => updateListItem("offers", index, "description", e.target.value)}
-                  />
-                  <button type="button" onClick={() => removeListItem("offers", index)}>
-                    Remove
-                  </button>
-                </div>
-              ))}
+              {activeStep < steps.length - 1 ? (
+                <button type="button" className="step-btn primary" onClick={nextStep}>
+                  Next
+                </button>
+              ) : (
+                <button type="submit" className="add-movie-btn">
+                  {editMovie ? "Update Movie" : "Add Movie"}
+                </button>
+              )}
             </div>
-
-            <button type="submit" className="add-movie-btn">
-              {editMovie ? "Update Movie" : "Add Movie"}
-            </button>
-          </form>
-        </div>
+          </div>
+        </form>
       </div>
+    </div>
+  );
+}
+
+function AccordionItem({ title, isOpen, onClick, children }) {
+  return (
+    <div className={`accordion-item ${isOpen ? "open" : ""}`}>
+      <button type="button" className="accordion-header" onClick={onClick}>
+        <span>{title}</span>
+        <b>{isOpen ? "−" : "+"}</b>
+      </button>
+      {isOpen && <div className="accordion-body">{children}</div>}
     </div>
   );
 }
@@ -303,7 +700,7 @@ function SelectField({ label, value, options, onChange, required = false }) {
       <label>{label}</label>
       <select value={value || ""} required={required} onChange={(e) => onChange(e.target.value)}>
         {options.map((option) => (
-          <option key={option} value={option}>{option.replace(/_/g, " ")}</option>
+          <option key={option} value={option}>{String(option).replace(/_/g, " ")}</option>
         ))}
       </select>
     </div>
@@ -314,13 +711,7 @@ function Field({ label, value, onChange, type = "text", placeholder = "", requir
   return (
     <div className="form-group">
       <label>{label}</label>
-      <input
-        type={type}
-        value={value || ""}
-        placeholder={placeholder}
-        required={required}
-        onChange={(e) => onChange(e.target.value)}
-      />
+      <input type={type} value={value || ""} placeholder={placeholder} required={required} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
@@ -338,72 +729,57 @@ function FileField({ label, accept, multiple = false, onChange }) {
   return (
     <div className="form-group file-field">
       <label>{label}</label>
-      <input
-        type="file"
-        accept={accept}
-        multiple={multiple}
-        onChange={(e) => onChange(multiple ? Array.from(e.target.files || []) : e.target.files?.[0] || null)}
-      />
+      <input type="file" accept={accept} multiple={multiple} onChange={(e) => onChange(multiple ? Array.from(e.target.files || []) : e.target.files?.[0] || null)} />
     </div>
   );
 }
 
-function SeatPreview({ totalSeats, regularSeatPrice, premiumSeatPrice, vipSeatPrice }) {
+function SeatPreview({ movie }) {
   const sections = [
-    { title: "Recliner Rows", type: "recliner", rows: 2, seatsPerRow: 8, price: vipSeatPrice },
-    { title: "Prime Plus Rows", type: "prime-plus", rows: 2, seatsPerRow: 10, price: premiumSeatPrice },
-    { title: "Prime Rows", type: "prime", rows: 99, seatsPerRow: 12, price: regularSeatPrice },
+    { title: "Regular Seats", type: "regular", prefix: "A", count: movie.regularSeats, price: movie.regularSeatPrice },
+    { title: "Prime Seats", type: "prime", prefix: "P", count: movie.primeSeats, price: movie.primeSeatPrice },
+    { title: "VIP Seats", type: "vip", prefix: "V", count: movie.vipSeats, price: movie.vipSeatPrice },
   ];
-  const limit = Math.max(Number(totalSeats || 0), 1);
-  let created = 0;
-  let rowIndex = 0;
-
-  const layout = sections.map((section) => {
-    const rows = [];
-    for (let index = 0; index < section.rows && created < limit; index += 1) {
-      const rowName = String.fromCharCode(65 + rowIndex);
-      const seatCount = Math.min(section.seatsPerRow, limit - created);
-      const seats = Array.from({ length: seatCount }, (_, seatIndex) => String(seatIndex + 1).padStart(2, "0"));
-      rows.push({ rowName, seats });
-      created += seatCount;
-      rowIndex += 1;
-    }
-    return { ...section, rows };
-  }).filter((section) => section.rows.length);
 
   return (
     <div className="bms-seat-layout">
       <div className="bms-screen">SCREEN</div>
-      {layout.map((section) => (
-        <section className="bms-seat-section" key={section.type}>
-          <div className="bms-section-title">
-            <strong>{section.title}</strong>
-            <span>Rs {section.price || 0}</span>
-          </div>
-          {section.rows.map((row) => (
-            <div className="bms-seat-row" key={row.rowName}>
-              <b>{row.rowName}</b>
-              <div className="bms-seat-numbers">
-                {row.seats.map((seat) => (
-                  <span className={section.type} key={`${row.rowName}${seat}`}>{seat}</span>
-                ))}
-              </div>
+
+      {sections.map((section) => {
+        const seats = Array.from({ length: Math.min(toNumber(section.count), 40) }, (_, index) => `${section.prefix}${index + 1}`);
+
+        return (
+          <section className="bms-seat-section" key={section.type}>
+            <div className="bms-section-title">
+              <strong>{section.title}</strong>
+              <span>Rs {section.price || 0}</span>
             </div>
-          ))}
-        </section>
-      ))}
+
+            <div className="bms-seat-numbers">
+              {seats.map((seat) => (
+                <span className={section.type} key={seat}>{seat}</span>
+              ))}
+            </div>
+
+            {toNumber(section.count) > 40 && (
+              <p className="seat-preview-more">+ {toNumber(section.count) - 40} more seats generated automatically</p>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }
 
 function DocumentEditor({ documents, onChange }) {
   const addDocument = () => onChange([...documents, { documentType: documentTypes[0], file: null }]);
+
   const updateDocument = (index, patch) => {
     onChange(documents.map((document, documentIndex) => documentIndex === index ? { ...document, ...patch } : document));
   };
 
   return (
-    <div className="section-editor">
+    <div className="section-editor inner-section">
       <div className="section-editor-top">
         <h2>Document Upload Section</h2>
         <button type="button" onClick={addDocument}>Add Document</button>
@@ -415,9 +791,7 @@ function DocumentEditor({ documents, onChange }) {
             {documentTypes.map((type) => <option key={type} value={type}>{type}</option>)}
           </select>
           <input accept=".pdf,.jpg,.jpeg,.png,.docx" type="file" onChange={(e) => updateDocument(index, { file: e.target.files?.[0] || null })} />
-          <button type="button" onClick={() => onChange(documents.filter((_, documentIndex) => documentIndex !== index))}>
-            Remove
-          </button>
+          <button type="button" onClick={() => onChange(documents.filter((_, documentIndex) => documentIndex !== index))}>Remove</button>
         </div>
       ))}
     </div>
@@ -426,37 +800,18 @@ function DocumentEditor({ documents, onChange }) {
 
 function PeopleEditor({ title, addLabel, items, onAdd, onUpdate, onRemove }) {
   return (
-    <div className="section-editor">
+    <div className="section-editor inner-section">
       <div className="section-editor-top">
         <h2>{title}</h2>
-        <button type="button" onClick={onAdd}>
-          {addLabel}
-        </button>
+        <button type="button" onClick={onAdd}>{addLabel}</button>
       </div>
 
       {(items || []).map((member, index) => (
         <div className="repeat-row" key={`${title}-${index}`}>
-          <input
-            type="text"
-            placeholder="Name"
-            value={member.name || ""}
-            onChange={(e) => onUpdate(index, "name", e.target.value)}
-          />
-          <input
-            type="text"
-            placeholder="Role"
-            value={member.role || ""}
-            onChange={(e) => onUpdate(index, "role", e.target.value)}
-          />
-          <input
-            type="text"
-            placeholder="Photo URL"
-            value={member.photo || ""}
-            onChange={(e) => onUpdate(index, "photo", e.target.value)}
-          />
-          <button type="button" onClick={() => onRemove(index)}>
-            Remove
-          </button>
+          <input type="text" placeholder="Name" value={member.name || ""} onChange={(e) => onUpdate(index, "name", e.target.value)} />
+          <input type="text" placeholder="Role" value={member.role || ""} onChange={(e) => onUpdate(index, "role", e.target.value)} />
+          <input type="text" placeholder="Photo URL" value={member.photo || ""} onChange={(e) => onUpdate(index, "photo", e.target.value)} />
+          <button type="button" onClick={() => onRemove(index)}>Remove</button>
         </div>
       ))}
     </div>
