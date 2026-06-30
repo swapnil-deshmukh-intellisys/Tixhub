@@ -68,6 +68,9 @@ module.exports = createInMemoryModel("Movie", {
 
   bookedSeats: [],
   blockedSeats: [],
+  blockedRegularSeats: 0,
+  blockedPrimeSeats: 0,
+  blockedVipSeats: 0,
 
   ticketPrice: 150,
   regularSeatPrice: 150,
@@ -82,6 +85,9 @@ module.exports = createInMemoryModel("Movie", {
     vipSeats: 100,
     bookedSeats: [],
     blockedSeats: [],
+    blockedRegularSeats: 0,
+    blockedPrimeSeats: 0,
+    blockedVipSeats: 0,
     seats: [],
   },
 

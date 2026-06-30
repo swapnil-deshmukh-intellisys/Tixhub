@@ -6,12 +6,20 @@ const fields = [
   { name: "operatorName", label: "Bus operator name" },
   { name: "fromCity", label: "From city" },
   { name: "toCity", label: "To city" },
+  { name: "departureDate", label: "Departure date", type: "date" },
   { name: "departureTime", label: "Departure time", type: "time" },
   { name: "arrivalTime", label: "Arrival time", type: "time" },
   { name: "busType", label: "Bus type", placeholder: "AC Sleeper" },
-  { name: "seatCount", label: "Seat count", type: "number", min: "0" },
-  { name: "price", label: "Price", type: "number", min: "0" },
-  { name: "amenities", label: "Amenities", placeholder: "Charging, Water bottle, Blanket", full: true },
+  { name: "seatCount", label: "Seat count", type: "number", min: "1" },
+  { name: "price", label: "Ticket price", type: "number", min: "1" },
+  { name: "pickupPoint", label: "Pickup point" },
+  { name: "dropPoint", label: "Drop point" },
+  {
+    name: "amenities",
+    label: "Amenities",
+    placeholder: "Charging, Water bottle, Blanket",
+    full: true,
+  },
 ];
 
 function AddBus() {

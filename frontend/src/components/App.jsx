@@ -27,6 +27,7 @@ import MovieContent from "./components/MovieContent";
 import FlightContent from "./components/FlightContent";
 
 import VendorDashboard from "./pages/vendor/VendorDashboard";
+import MovieVendorDashboard from "./pages/vendor/MovieVendorDashboard";
 import AddMovie from "./pages/vendor/AddMovie";
 import AddFlight from "./pages/vendor/AddFlight";
 import AddHotel from "./pages/vendor/AddHotel";
@@ -116,6 +117,14 @@ function App() {
         element={
           <ProtectedRoute roles={["vendor", "admin"]}>
             <VendorDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendor/dashboard"
+        element={
+          <ProtectedRoute roles={["vendor", "admin"]}>
+            <MovieVendorDashboard />
           </ProtectedRoute>
         }
       />

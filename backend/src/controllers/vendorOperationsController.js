@@ -158,9 +158,9 @@ const createScreen = async (req, res) => {
   const totalRows = Number(req.body.total_rows || req.body.totalRows || req.body.rows || 10);
   const seatsPerRow = Number(req.body.seats_per_row || req.body.seatsPerRow || 12);
   await pool.query(
-    `INSERT INTO screens (id, theatre_id, vendor_id, screen_name, total_rows, seats_per_row, total_seats, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [screenId, req.body.theatre_id || req.body.theatreId || null, req.user.id, req.body.screen_name || req.body.name || req.body.screenName || "", totalRows, seatsPerRow, totalRows * seatsPerRow, req.body.status || "active"]
+    `INSERT INTO screens (id, theatre_id, vendor_id, screen_name, screen_type, total_rows, seats_per_row, total_seats, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [screenId, req.body.theatre_id || req.body.theatreId || null, req.user.id, req.body.screen_name || req.body.name || req.body.screenName || "", req.body.screen_type || req.body.screenType || "2D", totalRows, seatsPerRow, totalRows * seatsPerRow, req.body.status || "active"]
   );
   emitVendorUpdated(req.user.id, "screenUpdated", { id: screenId });
   res.status(201).json({ message: "Screen created", screen: { id: screenId, ...req.body } });
@@ -214,9 +214,9 @@ const updateScreen = async (req, res) => {
   const totalRows = Number(req.body.total_rows || req.body.totalRows || req.body.rows || 10);
   const seatsPerRow = Number(req.body.seats_per_row || req.body.seatsPerRow || 12);
   const [result] = await pool.query(
-    `UPDATE screens SET theatre_id = ?, screen_name = ?, total_rows = ?, seats_per_row = ?, total_seats = ?, status = ?
+    `UPDATE screens SET theatre_id = ?, screen_name = ?, screen_type = ?, total_rows = ?, seats_per_row = ?, total_seats = ?, status = ?
      WHERE id = ? AND ${filter.sql}`,
-    [req.body.theatre_id || req.body.theatreId || null, req.body.screen_name || req.body.name || req.body.screenName || "", totalRows, seatsPerRow, totalRows * seatsPerRow, req.body.status || "active", req.params.id, ...filter.params]
+    [req.body.theatre_id || req.body.theatreId || null, req.body.screen_name || req.body.name || req.body.screenName || "", req.body.screen_type || req.body.screenType || "2D", totalRows, seatsPerRow, totalRows * seatsPerRow, req.body.status || "active", req.params.id, ...filter.params]
   );
   if (!result.affectedRows) return res.status(404).json({ message: "Screen not found" });
   emitVendorUpdated(req.user.id, "screenUpdated", { id: req.params.id });

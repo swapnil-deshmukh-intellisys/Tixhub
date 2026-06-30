@@ -34,31 +34,68 @@ const seatCategoryLabels = {
   "classic plus": "Prime",
 };
 
-const normalizeSeatCategory = (value) => seatCategoryLabels[String(value || "").toLowerCase()] || String(value || "Regular");
+const normalizeSeatCategory = (value) =>
+  seatCategoryLabels[String(value || "").toLowerCase()] ||
+  String(value || "Regular");
+
+const toSeatArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      return value
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  }
+
+  if (typeof value === "object") {
+    return Object.values(value).flat();
+  }
+
+  return [];
+};
 
 const groupLiveSeats = (seats) => {
   const byCategory = new Map();
+
   seats.forEach((seat) => {
     const categoryName = normalizeSeatCategory(seat.seatType || seat.category);
     const seatNo = seat.seatNo || seat.seatNumber;
     const rowName = seat.rowName || String(seatNo || "").replace(/\d/g, "") || "A";
+
     if (!byCategory.has(categoryName)) byCategory.set(categoryName, new Map());
+
     const rows = byCategory.get(categoryName);
+
     if (!rows.has(rowName)) rows.set(rowName, []);
+
     rows.get(rowName).push({ ...seat, seatNo, rowName });
   });
 
-  return ["VIP", "Prime", "Regular"].map((categoryName) => {
-    const rows = byCategory.get(categoryName) || new Map();
-    return {
-      category: categoryName,
-      price: rows.values().next().value?.[0]?.price || 0,
-      rows: [...rows.entries()].map(([row, rowSeats]) => ({
-        row,
-        seats: rowSeats.sort((a, b) => Number(String(a.seatNumber || a.seatNo).replace(/\D/g, "")) - Number(String(b.seatNumber || b.seatNo).replace(/\D/g, ""))),
-      })),
-    };
-  }).filter((section) => section.rows.length);
+  return ["VIP", "Prime", "Regular"]
+    .map((categoryName) => {
+      const rows = byCategory.get(categoryName) || new Map();
+
+      return {
+        category: categoryName,
+        price: rows.values().next().value?.[0]?.price || 0,
+        rows: [...rows.entries()].map(([row, rowSeats]) => ({
+          row,
+          seats: rowSeats.sort(
+            (a, b) =>
+              Number(String(a.seatNumber || a.seatNo).replace(/\D/g, "")) -
+              Number(String(b.seatNumber || b.seatNo).replace(/\D/g, ""))
+          ),
+        })),
+      };
+    })
+    .filter((section) => section.rows.length);
 };
 
 function SeatSelection() {
@@ -75,23 +112,84 @@ function SeatSelection() {
 
   const [selected, setSelected] = useState([]);
   const [liveSeats, setLiveSeats] = useState([]);
+
   const showId = movie?._id || "";
+
   const unavailableSeats = useMemo(() => {
-    const liveUnavailable = liveSeats.filter((seat) => seat.status === "booked" || seat.status === "blocked").map((seat) => seat.seatNo || seat.seatNumber);
-    return liveUnavailable.length ? liveUnavailable : movie?.bookedSeats || [];
-  }, [liveSeats, movie?.bookedSeats]);
+    const liveUnavailable = liveSeats
+      .filter((seat) => seat.status === "booked" || seat.status === "blocked")
+      .map((seat) => seat.seatNo || seat.seatNumber);
+
+    const bookedSeats = toSeatArray(movie?.bookedSeats);
+    const blockedSeats = toSeatArray(movie?.blockedSeats);
+
+    return liveUnavailable.length
+      ? liveUnavailable
+      : [...bookedSeats, ...blockedSeats];
+  }, [liveSeats, movie?.bookedSeats, movie?.blockedSeats]);
+
+  const safeUnavailableSeats = useMemo(
+    () => toSeatArray(unavailableSeats).map(String),
+    [unavailableSeats]
+  );
+
+  const liveSections = useMemo(() => groupLiveSeats(liveSeats), [liveSeats]);
+  const useLiveLayout = liveSections.length > 0;
+
+  const activeCategory = category.name || "Regular";
+  const activeLiveCategory = normalizeSeatCategory(activeCategory);
 
   useEffect(() => {
     if (!movie?._id) return;
+
     const theatreName = theatre?.name || theatre || "";
     const showDate = showtime?.date?.value || showtime?.date?.label || "";
     const showTime = showtime?.time || "";
 
-    fetch(`http://localhost:5000/api/seats/${encodeURIComponent(showId)}?movieId=${encodeURIComponent(movie._id)}&theatre=${encodeURIComponent(theatreName)}&screenId=${encodeURIComponent(movie.screenNumber || movie.screenName || "Screen 1")}&showDate=${encodeURIComponent(showDate)}&showTime=${encodeURIComponent(showTime)}&totalSeats=${encodeURIComponent(movie.totalSeats || 187)}&regularSeats=${encodeURIComponent(movie.regularSeats || 0)}&primeSeats=${encodeURIComponent(movie.primeSeats || 0)}&vipSeats=${encodeURIComponent(movie.vipSeats || 0)}&blockedSeats=${encodeURIComponent(movie.blockedSeats || 0)}&price=${encodeURIComponent(movie.ticketPrice || category.price || 240)}&regularSeatPrice=${encodeURIComponent(movie.regularSeatPrice || movie.ticketPrice || category.price || 240)}&premiumSeatPrice=${encodeURIComponent(movie.premiumSeatPrice || movie.primeSeatPrice || movie.ticketPrice || category.price || 240)}&vipSeatPrice=${encodeURIComponent(movie.vipSeatPrice || movie.ticketPrice || category.price || 240)}`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token") || sessionStorage.getItem("token")}`,
-      },
-    })
+    fetch(
+      `http://localhost:5000/api/seats/${encodeURIComponent(showId)}?movieId=${encodeURIComponent(
+        movie._id
+      )}&theatre=${encodeURIComponent(theatreName)}&screenId=${encodeURIComponent(
+        movie.screenNumber || movie.screenName || "Screen 1"
+      )}&showDate=${encodeURIComponent(showDate)}&showTime=${encodeURIComponent(
+        showTime
+      )}&totalSeats=${encodeURIComponent(
+        movie.totalSeats || 187
+      )}&regularSeats=${encodeURIComponent(
+        movie.regularSeats || 0
+      )}&primeSeats=${encodeURIComponent(
+        movie.primeSeats || 0
+      )}&vipSeats=${encodeURIComponent(
+        movie.vipSeats || 0
+      )}&blockedSeats=${encodeURIComponent(
+        movie.blockedSeats || 0
+      )}&blockedRegularSeats=${encodeURIComponent(
+        movie.blockedRegularSeats || 0
+      )}&blockedPrimeSeats=${encodeURIComponent(
+        movie.blockedPrimeSeats || 0
+      )}&blockedVipSeats=${encodeURIComponent(
+        movie.blockedVipSeats || 0
+      )}&price=${encodeURIComponent(
+        movie.ticketPrice || category.price || 240
+      )}&regularSeatPrice=${encodeURIComponent(
+        movie.regularSeatPrice || movie.ticketPrice || category.price || 240
+      )}&premiumSeatPrice=${encodeURIComponent(
+        movie.premiumSeatPrice ||
+          movie.primeSeatPrice ||
+          movie.ticketPrice ||
+          category.price ||
+          240
+      )}&vipSeatPrice=${encodeURIComponent(
+        movie.vipSeatPrice || movie.ticketPrice || category.price || 240
+      )}`,
+      {
+        headers: {
+          Authorization: `Bearer ${
+            localStorage.getItem("token") || sessionStorage.getItem("token")
+          }`,
+        },
+      }
+    )
       .then((res) => res.json())
       .then((data) => setLiveSeats(Array.isArray(data.seats) ? data.seats : []))
       .catch(() => setLiveSeats([]));
@@ -106,17 +204,12 @@ function SeatSelection() {
     );
   }
 
-  const activeCategory = category.name || "Regular";
-  const liveSections = useMemo(() => groupLiveSeats(liveSeats), [liveSeats]);
-  const useLiveLayout = liveSections.length > 0;
-  const activeLiveCategory = normalizeSeatCategory(activeCategory);
-
   const toggleSeat = (seatNo, sectionCategory) => {
     const normalizedSection = normalizeSeatCategory(sectionCategory);
     const normalizedActive = normalizeSeatCategory(activeCategory);
-    if (normalizedSection !== normalizedActive && !useLiveLayout) return;
-    if (useLiveLayout && normalizedSection !== normalizedActive) return;
-    if (unavailableSeats.includes(seatNo)) return;
+
+    if (normalizedSection !== normalizedActive) return;
+    if (safeUnavailableSeats.includes(String(seatNo))) return;
 
     setSelected((prev) => {
       if (prev.includes(seatNo)) {
@@ -141,7 +234,9 @@ function SeatSelection() {
         </button>
 
         <div>
-          <h2>{movie.title} - ({movie.language})</h2>
+          <h2>
+            {movie.title} - ({movie.language})
+          </h2>
           <p>
             {theatre.name} | {showtime.date?.label}, {showtime.date?.day}{" "}
             {showtime.date?.month}, 2026 | {showtime.time}
@@ -157,81 +252,104 @@ function SeatSelection() {
 
       <main className="seat-area">
         <div className="row-side">
-          {(useLiveLayout ? liveSections.flatMap((section) => [...section.rows.map((row) => row.row), ""]) : ["A", "B", "C", "D", "E", "F", "G", "", "H", "I", "", "J", "K"]).map(
-            (r, i) => (
-              <span key={i}>{r}</span>
-            )
-          )}
+          {(useLiveLayout
+            ? liveSections.flatMap((section) => [
+                ...section.rows.map((row) => row.row),
+                "",
+              ])
+            : ["A", "B", "C", "D", "E", "F", "G", "", "H", "I", "", "J", "K"]
+          ).map((r, i) => (
+            <span key={i}>{r}</span>
+          ))}
         </div>
 
         <div className="seat-layout">
-          {useLiveLayout ? liveSections.map((section) => (
-            <div className="seat-section" key={section.category}>
-              <h3>Rs {section.price || category.price || 0} {section.category.toUpperCase()} ROWS</h3>
+          {useLiveLayout
+            ? liveSections.map((section) => (
+                <div className="seat-section" key={section.category}>
+                  <h3>
+                    Rs {section.price || category.price || 0}{" "}
+                    {section.category.toUpperCase()} ROWS
+                  </h3>
 
-              {section.rows.map(({ row, seats }) => (
-                <div className="seat-row" key={row}>
-                  <div className="seat-gap"></div>
+                  {section.rows.map(({ row, seats }) => (
+                    <div className="seat-row" key={row}>
+                      <div className="seat-gap"></div>
 
-                  {seats.map((seat) => {
-                    const seatNo = seat.seatNo || seat.seatNumber;
-                    const displayNo = String(seat.seatNumber || seatNo).replace(row, "");
-                    const isSold = unavailableSeats.includes(seatNo) || unavailableSeats.includes(seat.seatNumber);
-                    const isSelected = selected.includes(seatNo);
-                    const isDisabled = normalizeSeatCategory(section.category) !== activeLiveCategory;
+                      {seats.map((seat) => {
+                        const seatNo = seat.seatNo || seat.seatNumber;
+                        const displayNo = String(seat.seatNumber || seatNo).replace(
+                          row,
+                          ""
+                        );
 
-                    return (
-                      <button
-                        key={seatNo}
-                        className={`seat 
-                          ${isSold ? "sold" : ""} 
-                          ${isSelected ? "selected" : ""} 
-                          ${isDisabled ? "disabled-seat" : ""}
-                        `}
-                        disabled={isSold || isDisabled}
-                        onClick={() => toggleSeat(seatNo, section.category)}
-                      >
-                        {displayNo}
-                      </button>
-                    );
-                  })}
+                        const isSold =
+                          safeUnavailableSeats.includes(String(seatNo)) ||
+                          safeUnavailableSeats.includes(String(seat.seatNumber));
+
+                        const isSelected = selected.includes(seatNo);
+                        const isDisabled =
+                          normalizeSeatCategory(section.category) !==
+                          activeLiveCategory;
+
+                        return (
+                          <button
+                            key={seatNo}
+                            className={`seat 
+                              ${isSold ? "sold" : ""} 
+                              ${isSelected ? "selected" : ""} 
+                              ${isDisabled ? "disabled-seat" : ""}
+                            `}
+                            disabled={isSold || isDisabled}
+                            onClick={() => toggleSeat(seatNo, section.category)}
+                          >
+                            {displayNo}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              ))
+            : seatSections.map((section) => (
+                <div className="seat-section" key={section.title}>
+                  <h3>
+                    Rs {section.price} {section.category.toUpperCase()} ROWS
+                  </h3>
+
+                  {section.rows.map((row) => (
+                    <div className="seat-row" key={row}>
+                      <div className="seat-gap"></div>
+
+                      {Array.from({ length: 17 }, (_, index) => {
+                        const num = String(index + 1).padStart(2, "0");
+                        const seatNo = `${row}${num}`;
+
+                        const isSold = safeUnavailableSeats.includes(String(seatNo));
+                        const isSelected = selected.includes(seatNo);
+                        const isDisabled =
+                          normalizeSeatCategory(section.category) !==
+                          normalizeSeatCategory(activeCategory);
+
+                        return (
+                          <button
+                            key={seatNo}
+                            className={`seat 
+                              ${isSold ? "sold" : ""} 
+                              ${isSelected ? "selected" : ""} 
+                              ${isDisabled ? "disabled-seat" : ""}
+                            `}
+                            disabled={isSold || isDisabled}
+                            onClick={() => toggleSeat(seatNo, section.category)}
+                          >
+                            {num}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               ))}
-            </div>
-          )) : seatSections.map((section) => (
-            <div className="seat-section" key={section.title}>
-              <h3>Rs {section.price} {section.category.toUpperCase()} ROWS</h3>
-
-              {section.rows.map((row) => (
-                <div className="seat-row" key={row}>
-                  <div className="seat-gap"></div>
-
-                  {Array.from({ length: 17 }, (_, index) => {
-                    const num = String(index + 1).padStart(2, "0");
-                    const seatNo = `${row}${num}`;
-                    const isSold = unavailableSeats.includes(seatNo);
-                    const isSelected = selected.includes(seatNo);
-                    const isDisabled = section.category !== activeCategory;
-
-                    return (
-                      <button
-                        key={seatNo}
-                        className={`seat 
-                          ${isSold ? "sold" : ""} 
-                          ${isSelected ? "selected" : ""} 
-                          ${isDisabled ? "disabled-seat" : ""}
-                        `}
-                        disabled={isSold || isDisabled}
-                        onClick={() => toggleSeat(seatNo, section.category)}
-                      >
-                        {num}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          ))}
 
           <div className="screen-box">
             <div className="screen-line"></div>
@@ -246,17 +364,27 @@ function SeatSelection() {
       </main>
 
       <div className="legend">
-        <span><i className="available"></i> Available</span>
-        <span><i className="selected-box"></i> Selected</span>
-        <span><i className="sold-box"></i> Sold</span>
-        <span><i className="disabled-box"></i> Disabled</span>
+        <span>
+          <i className="available"></i> Available
+        </span>
+        <span>
+          <i className="selected-box"></i> Selected
+        </span>
+        <span>
+          <i className="sold-box"></i> Sold
+        </span>
+        <span>
+          <i className="disabled-box"></i> Disabled
+        </span>
       </div>
 
       {selected.length > 0 && (
         <footer className="booking-footer">
           <div>
             <strong>{selected.join(", ")}</strong>
-            <p>{selected.length}/{selectedSeats} seats selected</p>
+            <p>
+              {selected.length}/{selectedSeats} seats selected
+            </p>
           </div>
 
           <div>
@@ -269,9 +397,19 @@ function SeatSelection() {
           <button
             disabled={selected.length !== selectedSeats}
             onClick={() => {
-              const payload = { movie, theatre, showtime, seats: selected, totalAmount, category };
+              const payload = {
+                movie,
+                theatre,
+                showtime,
+                seats: selected,
+                totalAmount,
+                category,
+              };
+
               sessionStorage.setItem("moviePayment", JSON.stringify(payload));
-              navigate(`/dashboard/movies/${movie._id}/payment`, { state: payload });
+              navigate(`/dashboard/movies/${movie._id}/payment`, {
+                state: payload,
+              });
             }}
           >
             Continue

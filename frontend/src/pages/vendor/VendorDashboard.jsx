@@ -17,17 +17,21 @@ import {
   LayoutDashboard,
   LogOut,
   Plane,
+  Bus,
   QrCode,
   ShieldCheck,
   Search,
   Settings,
   Ticket,
+  Train,
   UserCheck,
   Users,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import FlightModule from "./FlightModule";
+import BusVendorDashboard from "./BusVendorDashboard";
 import "./VendorDashboard.css";
+
 
 const apiBase = "http://localhost:5000/api";
 const socketBase = "http://localhost:5000";
@@ -41,6 +45,16 @@ const getStoredUser = () => {
 
 const getMovieShowId = (movie) => String(movie?.showId || movie?._id || "");
 
+const normalizeVendorService = (value) => {
+  const service = String(value || "").toLowerCase();
+  if (["movie", "movies"].includes(service)) return "movies";
+  if (["flight", "flights"].includes(service)) return "flights";
+  if (["hotel", "hotels"].includes(service)) return "hotels";
+  if (["bus", "buses"].includes(service)) return "bus";
+  if (["train", "trains"].includes(service)) return "trains";
+  return service;
+};
+
 const sidebarItems = [
   ["Dashboard", LayoutDashboard, "/vendor-dashboard"],
   ["Bookings", Ticket, "/vendor/bookings"],
@@ -53,23 +67,18 @@ const sidebarItems = [
 ];
 
 const serviceMeta = {
-  movies: { label: "Movies", icon: "🎬", route: "/vendor/movies" },
-  flights: { label: "Flights", icon: "✈", route: "/vendor/flights" },
-  hotels: { label: "Hotels", icon: "🏨", route: "/vendor/hotels" },
-  events: { label: "Events", icon: "🎫", route: "/vendor/events" },
-  bus: { label: "Bus", icon: "🚌", route: "/vendor/bus" },
-  travel: { label: "Travel", icon: "🌍", route: "/vendor/travel" },
+  movies: { label: "Movies", icon: Film, route: "/vendor/movies", module: "movie" },
+  flights: { label: "Flights", icon: Plane, route: "/vendor/flights", module: "flight" },
+  hotels: { label: "Hotels", icon: Hotel, route: "/vendor/hotels", module: "hotel" },
+  bus: { label: "Buses", icon: Bus, route: "/vendor/bus", module: "bus" },
+  trains: { label: "Trains", icon: Train, route: "/vendor/trains", module: "train" },
 };
 
-const serviceModules = ["movies", "flights", "hotels", "events", "bus", "travel"];
-const commonServices = ["all", "movies", "flights", "hotels", "events", "bus", "travel"];
+const serviceModules = ["movies", "flights", "hotels", "bus", "trains"];
+const commonServices = ["all", "movies", "flights", "hotels", "bus", "trains"];
 const weeklySales = [42, 42, 34, 33, 22, 22, 33, 41, 38, 49, 44, 47, 39, 22, 25, 21, 24, 23, 31, 24, 18, 21];
 const revenueBars = [46, 36, 72, 58, 44, 50, 45];
-const fallbackMovies = [
-  { _id: "demo-1", title: "The Red Code", genre: "Action", language: "Hindi", theatre: "TixHub Screen 1", showTime: "7:30 PM", ticketPrice: 280, totalSeats: 80, bookedSeats: ["A1", "A2"], status: "active" },
-  { _id: "demo-2", title: "Midnight Show", genre: "Drama", language: "English", theatre: "TixHub Screen 2", showTime: "9:45 PM", ticketPrice: 240, totalSeats: 72, bookedSeats: ["B4"], status: "active" },
-  { _id: "demo-3", title: "City Lights", genre: "Romance", language: "Tamil", theatre: "TixHub Screen 3", showTime: "6:00 PM", ticketPrice: 220, totalSeats: 64, bookedSeats: [], status: "draft" },
-];
+const fallbackMovies = [];
 const fallbackStats = {
   totalListings: 0,
   totalBookings: 0,
@@ -94,6 +103,7 @@ function VendorDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = getStoredUser();
+  const [profile, setProfile] = useState(user);
   const activeRoute = location.pathname === "/vendor-dashboard" || location.pathname === "/vendor" ? "dashboard" : location.pathname.replace("/vendor/", "");
   const [stats, setStats] = useState(fallbackStats);
   const [movies, setMovies] = useState(fallbackMovies);
@@ -116,16 +126,19 @@ function VendorDashboard() {
   const [error, setError] = useState("");
 
   const enabledServices = useMemo(() => {
-    const configured = user.enabledServices || user.vendorServices || user.services;
+    const configured = profile.enabledServices || profile.vendorServices || profile.services || user.enabledServices || user.vendorServices || user.services;
     if (Array.isArray(configured) && configured.length) {
-      return configured.map((item) => String(item).toLowerCase()).filter((item) => serviceModules.includes(item));
+      return configured.map(normalizeVendorService).filter((item) => serviceModules.includes(item));
     }
-    if (String(user.service || "").toLowerCase()) {
-      const service = String(user.service).toLowerCase();
+    if (String(profile.service || profile.module || profile.serviceType || user.service || user.module || user.serviceType || "").toLowerCase()) {
+      const service = normalizeVendorService(profile.service || profile.module || profile.serviceType || user.service || user.module || user.serviceType);
       return serviceModules.includes(service) ? [service] : ["movies"];
     }
     return serviceModules;
-  }, [flights.length, user]);
+  }, [flights.length, profile, user]);
+
+  const vendorName = profile.name || profile.businessName || profile.companyName || user.name || "Vendor";
+  const vendorInitials = vendorName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "TV";
 
   const activeService = activeRoute === "dashboard"
     ? "all"
@@ -138,7 +151,8 @@ function VendorDashboard() {
   const loadDashboard = async () => {
     setLoading(true);
     setError("");
-    const [statsRes, moviesRes, flightsRes, bookingsRes, customersRes, availabilityRes, settlementsRes, paymentRes] = await Promise.allSettled([
+    const [profileRes, statsRes, moviesRes, flightsRes, bookingsRes, customersRes, availabilityRes, settlementsRes, paymentRes] = await Promise.allSettled([
+      axios.get(`${apiBase}/vendor/profile`, auth()),
       axios.get(`${apiBase}/vendor/dashboard-stats`, auth()),
       axios.get(`${apiBase}/vendor/movies`, auth()),
       axios.get(`${apiBase}/vendor/flights`, auth()),
@@ -149,8 +163,9 @@ function VendorDashboard() {
       axios.get(`${apiBase}/vendor/payment-details`, auth()),
     ]);
 
+    if (profileRes.status === "fulfilled") setProfile(profileRes.value.data?.user || profileRes.value.data || user);
     if (statsRes.status === "fulfilled") setStats({ ...fallbackStats, ...(statsRes.value.data || {}) });
-    if (moviesRes.status === "fulfilled") setMovies(Array.isArray(moviesRes.value.data) && moviesRes.value.data.length ? moviesRes.value.data : fallbackMovies);
+    if (moviesRes.status === "fulfilled") setMovies(Array.isArray(moviesRes.value.data) ? moviesRes.value.data : fallbackMovies);
     if (flightsRes.status === "fulfilled") setFlights(Array.isArray(flightsRes.value.data) ? flightsRes.value.data : []);
     if (bookingsRes.status === "fulfilled") setBookings(Array.isArray(bookingsRes.value.data) ? bookingsRes.value.data : []);
     if (customersRes.status === "fulfilled") setCustomers(Array.isArray(customersRes.value.data) ? customersRes.value.data : []);
@@ -207,14 +222,14 @@ function VendorDashboard() {
     ...movies.map((movie) => ({
       id: movie._id || movie.title,
       title: movie.title || "Untitled Movie",
-      meta: `Movies · ${movie.theatre || movie.genre || "Listing"}`,
+      meta: `Movies - ${movie.theatre || movie.genre || "Listing"}`,
       price: movie.ticketPrice || movie.price || 250,
       image: movie.image || movie.posterUrl || movie.bannerUrl || "",
     })),
     ...flights.map((flight) => ({
       id: flight._id || flight.flightNumber,
       title: flight.airlineName || flight.flightNumber || "Flight",
-      meta: `Flights · ${flight.fromCode || flight.fromCity || ""} ${flight.toCode ? `to ${flight.toCode}` : ""}`,
+      meta: `Flights - ${flight.fromCode || flight.fromCity || ""} ${flight.toCode ? `to ${flight.toCode}` : ""}`,
       price: flight.ticketPrice || flight.baseFare || 0,
       image: flight.airlineLogo || "",
     })),
@@ -250,11 +265,11 @@ function VendorDashboard() {
   };
 
   const renderPage = () => {
-    if (activeRoute === "movies") return <MovieDashboard stats={stats} movies={movies} navigate={navigate} />;
+    if (activeRoute === "movies") return <MovieDashboard stats={stats} movies={movies} bookings={bookings} navigate={navigate} />;
     if (activeRoute === "my-movies") return <MoviesPage movies={movies} reload={loadDashboard} navigate={navigate} />;
     if (activeRoute === "seat-management") return <SeatManagementPage movies={movies} />;
     if (activeRoute === "qr-scanner") return <QrScannerPage scans={ticketScans} reload={loadDashboard} />;
-    if (activeRoute === "theatres") return <TheatreScreenPage overview={theatreOverview} reload={loadDashboard} movies={movies} />;
+    if (activeRoute === "theatres" || activeRoute === "shows") return <TheatreScreenPage overview={theatreOverview} reload={loadDashboard} movies={movies} />;
     if (activeRoute === "analytics") return <ShowAnalyticsPage rows={showAnalytics} />;
     if (activeRoute === "pricing") return <PricingPage pricing={pricing} shows={theatreOverview.shows || []} reload={loadDashboard} />;
     if (activeRoute === "refunds") return <RefundsPage refunds={refunds} reload={loadDashboard} />;
@@ -263,7 +278,13 @@ function VendorDashboard() {
     if (activeRoute === "notification-center") return <NotificationCenterPage notifications={notifications} reload={loadDashboard} />;
     if (activeRoute === "movie-status") return <MovieStatusPage movies={movies} reload={loadDashboard} />;
     if (["flights", "add-flight", "my-flights", "flight-seat-management", "flight-bookings", "passengers", "flight-revenue", "flight-reports"].includes(activeRoute) || activeRoute.startsWith("edit-flight")) return <FlightModule page={activeRoute === "flights" ? "dashboard" : activeRoute} navigate={navigate} />;
-    if (["hotels", "events", "bus", "travel"].includes(activeRoute)) return <FutureService service={activeRoute} />;
+if (activeRoute === "bus") {
+  return <BusVendorDashboard />;
+}
+
+if (["hotels", "events", "travel"].includes(activeRoute)) {
+  return <FutureService service={activeRoute} />;
+}
     if (activeRoute === "bookings") return <BookingsPage bookings={bookings} />;
     if (activeRoute === "customers") return <CustomersPage customers={customers} customerList={customerList} />;
     if (activeRoute === "revenue" || activeRoute === "transactions") return <RevenuePage stats={stats} />;
@@ -271,8 +292,10 @@ function VendorDashboard() {
     if (activeRoute === "payment-details" || activeRoute === "settings") return <PaymentDetailsPage details={paymentDetails} reload={loadDashboard} />;
     if (activeRoute === "profile") return <ProfilePage user={user} />;
     if (activeRoute === "support") return <SupportPage />;
+    if (activeRoute === "reports") return <ShowAnalyticsPage rows={showAnalytics} />;
+    if (activeRoute === "blocked-seats") return <AvailabilityPage rows={availability.filter((row) => Number(row.blockedSeats || row.blocked || 0) > 0)} movies={movies} />;
     if (activeRoute === "availability") return <AvailabilityPage rows={availability} movies={movies} />;
-    return <DashboardHome cardData={cardData} stats={stats} bookings={bookings} customers={customers} scans={ticketScans} refunds={refunds} notifications={notifications} listings={[...movies, ...flights]} schedules={theatreOverview.shows || []} topListings={topListings} navigate={navigate} />;
+    return <DashboardHome cardData={cardData} stats={stats} bookings={bookings} customers={customers} scans={ticketScans} refunds={refunds} notifications={notifications} listings={[...movies, ...flights]} schedules={theatreOverview.shows || []} topListings={topListings} navigate={navigate} vendorName={vendorName} enabledServices={enabledServices} />;
   };
 
   return (
@@ -314,8 +337,8 @@ function VendorDashboard() {
             <button className="vendor-language" type="button"><Globe2 size={18} />English<ChevronDown size={16} /></button>
             <button className="vendor-icon-btn" type="button" aria-label="Notifications"><Bell size={19} /><span /></button>
             <button className="vendor-profile" type="button">
-              <span className="vendor-avatar">TV</span>
-              <span><strong>TixHub Vendor</strong><small>Owner</small></span>
+              <span className="vendor-avatar">{vendorInitials}</span>
+              <span><strong>{vendorName}</strong><small>{profile.role || "Vendor"}</small></span>
               <ChevronDown size={16} />
             </button>
           </div>
@@ -333,17 +356,20 @@ function VendorDashboard() {
 function ServiceSwitcher({ enabledServices, activeService, navigate }) {
   return (
     <div className="service-switcher">
-      {enabledServices.map((service) => (
-        <button key={service} type="button" className={activeService === service ? "active" : ""} onClick={() => navigate(serviceMeta[service].route)}>
-          <span>{serviceMeta[service].icon}</span>
-          {serviceMeta[service].label}
-        </button>
-      ))}
+      {enabledServices.map((service) => {
+        const Icon = serviceMeta[service]?.icon || BriefcaseBusiness;
+        return (
+          <button key={service} type="button" className={activeService === service ? "active" : ""} onClick={() => navigate(serviceMeta[service].route)}>
+            <Icon size={17} />
+            {serviceMeta[service].label}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function DashboardHome({ cardData, stats, bookings, customers, scans, refunds, notifications, listings, schedules, topListings, navigate }) {
+function DashboardHome({ cardData, stats, bookings, customers, scans, refunds, notifications, listings, schedules, topListings, navigate, vendorName, enabledServices }) {
   const bookingStatusRows = [
     ["Confirmed", bookings.filter((booking) => normalizeStatus(booking) === "confirmed").length],
     ["Pending", bookings.filter((booking) => normalizeStatus(booking) === "pending").length],
@@ -358,6 +384,19 @@ function DashboardHome({ cardData, stats, bookings, customers, scans, refunds, n
 
   return (
     <>
+      {/* <section className="vendor-welcome">
+        <div>
+          <h1>Welcome, {vendorName}</h1>
+          <p>Vendor Panel</p>
+        </div>
+      </section> */}
+
+      <section className="vendor-service-card-grid">
+        {enabledServices.map((service) => (
+          <ServiceCard key={service} service={service} stats={stats} listings={listings} navigate={navigate} />
+        ))}
+      </section>
+
       <section className="vendor-card-grid">
         {cardData.map(([label, value, Icon]) => (
           <article className="vendor-kpi-card" key={label}>
@@ -376,20 +415,17 @@ function DashboardHome({ cardData, stats, bookings, customers, scans, refunds, n
 
       <section className="vendor-operations-grid">
         <BookingsTable title="Recent Bookings" bookings={bookings.slice(0, 6)} compact />
-        <article className="vendor-panel"><PanelTitle title="Recent Customer Activity" right="Live" /><InfoList rows={(customers.length ? customers.slice(0, 5).map((customer) => `${customer.customerName || customer.name || "Customer"} · ${customer.totalBookings || 1} booking${Number(customer.totalBookings || 1) === 1 ? "" : "s"}`) : ["Customer activity will appear after the first booking."])} /></article>
+        <article className="vendor-panel"><PanelTitle title="Recent Customer Activity" right="Live" /><InfoList rows={(customers.length ? customers.slice(0, 5).map((customer) => `${customer.customerName || customer.name || "Customer"} - ${customer.totalBookings || 1} booking${Number(customer.totalBookings || 1) === 1 ? "" : "s"}`) : ["Customer activity will appear after the first booking."])} /></article>
       </section>
 
       <section className="vendor-operations-grid">
-        <article className="vendor-panel"><PanelTitle title="Recent QR Scans" right="Gate" /><InfoList rows={(scans.length ? scans.slice(0, 5).map((scan) => `${scan.bookingCode || scan.booking_id || scan.bookingId || "Ticket"} · ${scan.status || scan.scan_status || "scanned"}`) : ["No QR scans today."])} /></article>
-        <article className="vendor-panel"><PanelTitle title="Recent Refund Requests" right="Refunds" /><InfoList rows={(refunds.length ? refunds.slice(0, 5).map((refund) => `${refund.bookingCode || refund.bookingId || "Booking"} · Rs ${refund.amount || 0} · ${refund.refundStatus || refund.status || "pending"}`) : ["No refund requests waiting."])} /></article>
+        <article className="vendor-panel"><PanelTitle title="Recent QR Scans" right="Gate" /><InfoList rows={(scans.length ? scans.slice(0, 5).map((scan) => `${scan.bookingCode || scan.booking_id || scan.bookingId || "Ticket"} - ${scan.status || scan.scan_status || "scanned"}`) : ["No QR scans today."])} /></article>
+        <article className="vendor-panel"><PanelTitle title="Recent Refund Requests" right="Refunds" /><InfoList rows={(refunds.length ? refunds.slice(0, 5).map((refund) => `${refund.bookingCode || refund.bookingId || "Booking"} - Rs ${refund.amount || 0} - ${refund.refundStatus || refund.status || "pending"}`) : ["No refund requests waiting."])} /></article>
       </section>
 
       <section className="vendor-panel vendor-page-panel management-overview-panel">
-        <PanelTitle title="Management Overview" right="SaaS" />
+        <PanelTitle title="Booking Overview" right="SaaS" />
         <div className="management-grid">
-          <OverviewBlock title="Listings Summary" rows={[["Total", listings.length], ["Active", stats.activeListings || listings.filter((listing) => (listing.status || "active") === "active").length], ["Pending", stats.pendingApproval || 0]]} />
-          <OverviewBlock title="Schedule Summary" rows={[["Upcoming", stats.upcomingSchedules || schedules.length], ["Open", schedules.filter((show) => String(show.status || "").includes("open")).length], ["Draft", schedules.filter((show) => String(show.status || "").includes("draft")).length]]} />
-          <OverviewBlock title="Capacity Utilization" rows={[["Booked", stats.bookedSeats || 0], ["Available", stats.availableSeats || 0], ["Blocked", stats.blockedSeats || 0]]} />
           <OverviewBlock title="Booking Status Distribution" rows={bookingStatusRows} />
           <OverviewBlock title="Customer Statistics" rows={[["Total Customers", stats.totalCustomers || customers.length || 0], ["Repeat Customers", customers.filter((customer) => Number(customer.totalBookings || 0) > 1).length], ["New Today", stats.todayCustomers || 0]]} />
         </div>
@@ -408,20 +444,77 @@ function DashboardHome({ cardData, stats, bookings, customers, scans, refunds, n
   );
 }
 
-function MovieDashboard({ stats, movies, navigate }) {
+function ServiceCard({ service, stats, listings, navigate }) {
+  const meta = serviceMeta[service];
+  const Icon = meta.icon || BriefcaseBusiness;
+  const moduleCount = stats.moduleCounts?.[meta.module] || stats.moduleCounts?.[service] || listings.filter((listing) => normalizeService(listing.module) === service).length;
+  const counts = {
+    movies: stats.totalMovies || moduleCount,
+    flights: stats.totalFlights || moduleCount,
+    hotels: stats.totalHotels || moduleCount,
+    bus: stats.totalBuses || moduleCount,
+    trains: stats.totalTrains || moduleCount,
+  };
+  return (
+    <button className={`vendor-service-card ${service}`} type="button" onClick={() => navigate(meta.route)}>
+      <span className="vendor-service-icon"><Icon size={24} /></span>
+      <span>
+        <strong>{meta.label}</strong>
+        <b>{counts[service] || 0}</b>
+        <small>{service === "movies" || service === "hotels" ? "Active listings" : "Active routes"}</small>
+      </span>
+      <i>Manage {meta.label}</i>
+    </button>
+  );
+}
+
+function MovieDashboard({ stats, movies, bookings, navigate }) {
   const [selectedMovie, setSelectedMovie] = useState(null);
+  const movieBookings = bookings.filter((booking) => {
+    const moduleName = String(booking.module || booking.service || booking.details?.module || "").toLowerCase();
+    return !moduleName || moduleName.includes("movie");
+  });
+  const bookingChartData = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => ({ day, value: 0 }));
+
+  movieBookings.forEach((booking) => {
+    const date = new Date(booking.createdAt || booking.bookingDate || booking.date || booking.updatedAt || Date.now());
+    const dayIndex = Number.isNaN(date.getTime()) ? 0 : (date.getDay() + 6) % 7;
+    bookingChartData[dayIndex].value += 1;
+  });
+
   const movieRevenue = movies.reduce((sum, movie) => sum + Number(movie.revenue || 0), 0) || stats.revenue || 0;
-  const cards = [["Total Movies", movies.length], ["Total Shows", movies.reduce((sum, movie) => sum + (movie.showTimes?.length || (movie.showTime ? 1 : 0)), 0)], ["Total Bookings", stats.totalBookings || 0], ["Movie Revenue", `Rs ${movieRevenue}`]];
+  const confirmed = movieBookings.filter((booking) => normalizeStatus(booking) === "confirmed").length;
+  const pending = movieBookings.filter((booking) => normalizeStatus(booking) === "pending").length;
+  const cancelled = movieBookings.filter((booking) => normalizeStatus(booking) === "cancelled").length;
+  const cards = [
+    ["Total Movies", movies.length],
+    ["Total Bookings", stats.totalBookings || movieBookings.length || 0],
+    ["Revenue", `Rs ${movieRevenue}`],
+    ["Blocked Seats", stats.blockedSeats || 0],
+    ["Available Seats", stats.availableSeats || 0],
+    ["Booked Seats", stats.bookedSeats || 0],
+  ];
   return (
     <>
-      <section className="vendor-section-heading">
-        <h1>Movie Management Dashboard</h1>
-        <p>Movie-specific listings, schedules, seats, QR scans, pricing, refunds, staff, and status controls.</p>
+      <section className="vendor-section-heading movie-management-heading">
+        <div>
+          <h1>Movie Management Dashboard</h1>
+          <p>Movie-specific listings, schedules, seats, QR scans, pricing, refunds, staff, and status controls.</p>
+        </div>
+        <button className="vendor-primary-action movie-add-right-button" type="button" onClick={() => navigate("/vendor/add-movie")}>Add Movie</button>
+      </section>
+      <section className="booking-status-grid">
+        <MiniCount label="Confirmed" value={confirmed} />
+        <MiniCount label="Pending" value={pending} />
+        <MiniCount label="Cancelled" value={cancelled} />
       </section>
       <section className="vendor-card-grid">{cards.map(([label, value]) => <article className="vendor-kpi-card" key={label}><div><p>{label}</p><h2>{value}</h2><span>Movie module</span></div></article>)}</section>
-      <section className="vendor-operations-grid">
+      <section className="movie-management-chart-grid">
         <article className="vendor-panel quick-actions-panel"><PanelTitle title="Movie Quick Actions" /><MovieQuickActions navigate={navigate} /></article>
-        <article className="vendor-panel movie-list-panel"><PanelTitle title="My Movies" /><MovieList movies={movies.slice(0, 5).map((movie, index) => ({ id: movie._id || index, title: movie.title, meta: `${movie.genre || "Movie"} · ${movie.language || ""}`, image: movie.image }))} /></article>
+        <article className="vendor-panel movie-booking-chart-panel"><PanelTitle title="Booking Chart" right="This Week" /><WeeklyMovieBookingChart data={bookingChartData} /></article>
+      </section>
+      <section className="movie-management-list-grid">
+        <article className="vendor-panel movie-list-panel"><PanelTitle title="My Movies" /><MovieList movies={movies.slice(0, 5).map((movie, index) => ({ id: movie._id || index, title: movie.title, meta: `${movie.genre || "Movie"} - ${movie.language || ""}`, image: movie.image }))} /></article>
       </section>
       <section className="vendor-panel vendor-page-panel movie-card-panel">
         <PanelTitle title="Movie Cards" right="Open" />
@@ -548,7 +641,7 @@ function MoviesPage({ movies, reload, navigate }) {
             type="button"
             onClick={() =>
               navigate("/vendor/add-movie", {
-                state: { movie },
+                state: { editMovieId: movie._id, movie },
               })
             }
           >
@@ -596,6 +689,7 @@ function SeatManagementPage({ movies }) {
   const [movieId, setMovieId] = useState(location.state?.movieId || movies[0]?._id || "");
   const [seats, setSeats] = useState([]);
   const [selectedSeat, setSelectedSeat] = useState(null);
+  const [blockedSeatType, setBlockedSeatType] = useState("regular");
   const selectedMovie = movies.find((movie) => movie._id === movieId) || movies[0];
   const showId = getMovieShowId(selectedMovie);
   const seatContext = {
@@ -632,6 +726,10 @@ function SeatManagementPage({ movies }) {
   };
 
   useEffect(() => {
+    if (!movieId && movies[0]?._id) setMovieId(movies[0]._id);
+  }, [movies.length, movieId]);
+
+  useEffect(() => {
     if (showId) loadSeats();
   }, [showId]);
 
@@ -660,7 +758,7 @@ function SeatManagementPage({ movies }) {
     try {
       if (action === "block") {
         const blockedReason = window.prompt("Blocked reason", seat.blockedReason || "Blocked by vendor") || "Blocked by vendor";
-        await axios.patch(`${apiBase}/seats/block`, { ...seatContext, seatNo: seat.seatNo || seat.seatNumber, blockedReason }, auth());
+        await axios.patch(`${apiBase}/seats/block`, { ...seatContext, seatNo: seat.seatNo || seat.seatNumber, blockedReason, blockedSeatType }, auth());
       }
       if (action === "unblock") await axios.patch(`${apiBase}/seats/unblock`, { ...seatContext, seatNo: seat.seatNo || seat.seatNumber }, auth());
     } catch (error) {
@@ -678,19 +776,46 @@ function SeatManagementPage({ movies }) {
           <label><span>Screen</span><input value={selectedMovie?.screenNumber || "Screen 1"} readOnly /></label>
           <label><span>Show</span><input value={`${selectedMovie?.showDate || selectedMovie?.releaseDate || ""} ${selectedMovie?.showTime || selectedMovie?.showTimes?.[0] || ""}`} readOnly /></label>
         </div>
+        <div className="vendor-filter-grid seat-type-grid">
+          <SelectField label="Blocked seat type" value={blockedSeatType} options={["regular", "prime", "vip"]} onChange={setBlockedSeatType} />
+        </div>
         <SeatLegend />
-        <div className="vendor-seat-grid">{seats.map((seat) => <button className={`vendor-seat ${seat.status} ${selectedSeat?.seatNumber === seat.seatNumber ? "selected" : ""}`} key={seat.seatNumber || seat.seatNo} type="button" onClick={() => setSelectedSeat(seat)}>{seat.seatNumber || seat.seatNo}</button>)}</div>
+        <SeatCategoryGrid seats={seats} selectedSeat={selectedSeat} setSelectedSeat={setSelectedSeat} />
       </article>
-      <SeatDetails seat={selectedSeat} onBlock={() => runSeatAction("block")} onUnblock={() => runSeatAction("unblock")} />
+      <SeatDetails seat={selectedSeat} blockedSeatType={blockedSeatType} onBlock={() => runSeatAction("block")} onUnblock={() => runSeatAction("unblock")} />
     </section>
   );
 }
 
-function SeatDetails({ seat, onBlock, onUnblock }) {
+function SeatCategoryGrid({ seats, selectedSeat, setSelectedSeat }) {
+  const sections = ["vip", "prime", "regular"];
+  return (
+    <div className="vendor-seat-sections">
+      {sections.map((section) => {
+        const sectionSeats = seats.filter((seat) => String(seat.seatType || seat.type || "").toLowerCase() === section);
+        if (!sectionSeats.length) return null;
+        return (
+          <div className="vendor-seat-section" key={section}>
+            <h3>{labelize(section)}</h3>
+            <div className="vendor-seat-grid">
+              {sectionSeats.map((seat) => {
+                const seatKey = seat.seatNo || `${seat.rowName || ""}${seat.seatNumber}`;
+                const selectedKey = selectedSeat?.seatNo || `${selectedSeat?.rowName || ""}${selectedSeat?.seatNumber || ""}`;
+                return <button className={`vendor-seat ${seat.status} ${selectedKey === seatKey ? "selected" : ""}`} key={seatKey} type="button" onClick={() => setSelectedSeat(seat)}>{seatKey}</button>;
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SeatDetails({ seat, blockedSeatType, onBlock, onUnblock }) {
   return (
     <article className="vendor-panel seat-details-panel">
       <PanelTitle title="Seat Details" right="Live" />
-      {!seat ? <p>Select a seat to view details.</p> : <div className="seat-detail-list">{[["Seat Number", seat.seatNumber || seat.seatNo], ["Status", seat.status], ["Customer Name", seat.customerName], ["Booking ID", seat.bookingId], ["Mobile", seat.customerMobile || seat.mobile], ["Email", seat.customerEmail || seat.email], ["Amount", seat.amount ? `Rs ${seat.amount}` : ""], ["Payment Status", seat.paymentStatus], ["Booking Status", seat.bookingStatus], ["Blocked By", seat.blockedBy], ["Blocked Reason", seat.blockedReason], ["Updated At", seat.updatedAt ? new Date(seat.updatedAt).toLocaleString() : ""]].map(([label, value]) => <p key={label}><strong>{label}</strong><span>{value || "-"}</span></p>)}<div className="vendor-row-actions"><button type="button" onClick={onBlock} disabled={seat.status !== "available"}>Block Seat</button><button type="button" onClick={onUnblock} disabled={seat.status !== "blocked"}>Unblock Seat</button><button type="button" disabled={seat.status !== "booked"}>View Customer</button></div></div>}
+      {!seat ? <p>Select a seat to view details.</p> : <div className="seat-detail-list">{[["Seat Number", seat.seatNo || seat.seatNumber], ["Category", seat.seatType || seat.type], ["Status", seat.status], ["Block As", blockedSeatType], ["Customer Name", seat.customerName], ["Booking ID", seat.bookingId], ["Mobile", seat.customerMobile || seat.mobile], ["Email", seat.customerEmail || seat.email], ["Amount", seat.amount ? `Rs ${seat.amount}` : ""], ["Payment Status", seat.paymentStatus], ["Booking Status", seat.bookingStatus], ["Blocked By", seat.blockedBy], ["Blocked Type", seat.blockedSeatType], ["Blocked Reason", seat.blockedReason], ["Updated At", seat.updatedAt ? new Date(seat.updatedAt).toLocaleString() : ""]].map(([label, value]) => <p key={label}><strong>{label}</strong><span>{value || "-"}</span></p>)}<div className="vendor-row-actions"><button type="button" onClick={onBlock} disabled={seat.status !== "available"}>Block Seat</button><button type="button" onClick={onUnblock} disabled={seat.status !== "blocked"}>Unblock Seat</button><button type="button" disabled={seat.status !== "booked"}>View Customer</button></div></div>}
     </article>
   );
 }
@@ -792,8 +917,8 @@ function TheatreScreenPage({ overview, reload, movies }) {
   const [showForm, setShowForm] = useState({ theatreId: "", screenId: "", movieId: "", showDate: "", showTime: "", price: 250, status: "active" });
 
   useEffect(() => {
-    setScreenForm((current) => ({ ...current, theatreId: current.theatreId || theatres[0]?._id || "" }));
-    setShowForm((current) => ({ ...current, theatreId: current.theatreId || theatres[0]?._id || "", screenId: current.screenId || screens[0]?._id || "", movieId: current.movieId || movies[0]?._id || "" }));
+    setScreenForm((current) => ({ ...current, theatreId: current.theatreId || rowId(theatres[0]) || "" }));
+    setShowForm((current) => ({ ...current, theatreId: current.theatreId || rowId(theatres[0]) || "", screenId: current.screenId || rowId(screens[0]) || "", movieId: current.movieId || rowId(movies[0]) || "" }));
   }, [theatres.length, screens.length, movies.length]);
 
   const submit = async (event, endpoint, body, reset) => {
@@ -819,9 +944,9 @@ function TheatreScreenPage({ overview, reload, movies }) {
         <MiniCount label="Shows" value={shows.length} />
         <MiniCount label="Active Screens" value={screens.filter((screen) => screen.status !== "inactive").length} />
       </section>
-      <section className="vendor-dashboard-grid">
+      <section className="vendor-dashboard-grid theatre-screen-grid">
         <article className="vendor-panel">
-          <PanelTitle title="Add Theatre" right="Theatre" />
+          <PanelTitle title="Theatre Management" right="Theatre" />
           <form className="vendor-settings-form compact-form" onSubmit={(event) => submit(event, "theatres", theatreForm, () => setTheatreForm({ name: "", city: "", address: "", status: "active" }))}>
             <Field label="Theatre name" value={theatreForm.name} onChange={(value) => setTheatreForm({ ...theatreForm, name: value })} />
             <Field label="City" value={theatreForm.city} onChange={(value) => setTheatreForm({ ...theatreForm, city: value })} />
@@ -829,26 +954,33 @@ function TheatreScreenPage({ overview, reload, movies }) {
             <SelectField label="Status" value={theatreForm.status} options={["active", "inactive"]} onChange={(value) => setTheatreForm({ ...theatreForm, status: value })} />
             <button type="submit">Add Theatre</button>
           </form>
+          <DataTable title="Theatres" columns={["Theatre name", "City", "Address", "Total Screens"]} rows={theatres.map((theatre) => [theatre.theatre_name || theatre.name, theatre.city, theatre.location || theatre.address, screens.filter((screen) => String(screen.theatre_id || screen.theatreId) === String(rowId(theatre))).length])} />
         </article>
         <article className="vendor-panel">
-          <PanelTitle title="Add Screen" right="Layout" />
-          <form className="vendor-settings-form compact-form" onSubmit={(event) => submit(event, "screens", screenForm, () => setScreenForm({ theatreId: theatres[0]?._id || "", name: "", rows: 10, seatsPerRow: 12, status: "active" }))}>
-            <SelectField label="Theatre" value={screenForm.theatreId} options={theatres.map((item) => ({ value: item._id, label: item.name }))} onChange={(value) => setScreenForm({ ...screenForm, theatreId: value })} />
-            <Field label="Screen name" value={screenForm.name} onChange={(value) => setScreenForm({ ...screenForm, name: value })} />
+          <PanelTitle title="Screen Management" right="Layout" />
+          <form className="vendor-settings-form compact-form" onSubmit={(event) => submit(event, "screens", screenForm, () => setScreenForm({ theatreId: rowId(theatres[0]) || "", name: "", rows: 10, seatsPerRow: 12, status: "active" }))}>
+            <SelectField label="Theatre" value={screenForm.theatreId} options={theatres.map((item) => ({ value: rowId(item), label: item.theatre_name || item.name }))} onChange={(value) => setScreenForm({ ...screenForm, theatreId: value })} />
+            <Field label="Screen number" value={screenForm.name} onChange={(value) => setScreenForm({ ...screenForm, name: value })} />
+            <SelectField label="Screen type" value={screenForm.screenType || "2D"} options={["2D", "3D", "IMAX", "4DX"]} onChange={(value) => setScreenForm({ ...screenForm, screenType: value })} />
             <Field label="Total rows" type="number" value={screenForm.rows} onChange={(value) => setScreenForm({ ...screenForm, rows: value })} />
             <Field label="Seats per row" type="number" value={screenForm.seatsPerRow} onChange={(value) => setScreenForm({ ...screenForm, seatsPerRow: value })} />
             <SelectField label="Status" value={screenForm.status} options={["active", "inactive"]} onChange={(value) => setScreenForm({ ...screenForm, status: value })} />
             <button type="submit">Add Screen</button>
           </form>
           <div className="mini-seat-layout">{layoutPreview.slice(0, 96).map((seat) => <span key={seat}>{seat}</span>)}</div>
+          <DataTable title="Screens" columns={["Screen number", "Screen type", "Seat layout", "Movie assigned", "Show timings"]} rows={screens.map((screen) => {
+            const screenShows = shows.filter((show) => String(show.screen_id || show.screenId) === String(rowId(screen)));
+            const assignedMovies = screenShows.map((show) => movies.find((movie) => String(rowId(movie)) === String(show.movie_id || show.movieId))?.title).filter(Boolean).join(", ");
+            return [screen.screen_name || screen.name, screen.screen_type || screen.screenType || "2D", `${screen.total_rows || screen.rows || 0} x ${screen.seats_per_row || screen.seatsPerRow || 0}`, assignedMovies || "-", screenShows.map((show) => show.show_time || show.showTime).filter(Boolean).join(", ") || "-"];
+          })} />
         </article>
       </section>
       <section className="vendor-panel vendor-page-panel">
         <PanelTitle title="Manage Shows" right="Shows" />
-        <form className="vendor-settings-form compact-form" onSubmit={(event) => submit(event, "shows", showForm, () => setShowForm({ theatreId: theatres[0]?._id || "", screenId: screens[0]?._id || "", movieId: movies[0]?._id || "", showDate: "", showTime: "", price: 250, status: "active" }))}>
-          <SelectField label="Movie" value={showForm.movieId} options={movies.map((item) => ({ value: item._id, label: item.title }))} onChange={(value) => setShowForm({ ...showForm, movieId: value })} />
-          <SelectField label="Theatre" value={showForm.theatreId} options={theatres.map((item) => ({ value: item._id, label: item.name }))} onChange={(value) => setShowForm({ ...showForm, theatreId: value })} />
-          <SelectField label="Screen" value={showForm.screenId} options={screens.map((item) => ({ value: item._id, label: item.name }))} onChange={(value) => setShowForm({ ...showForm, screenId: value })} />
+        <form className="vendor-settings-form compact-form" onSubmit={(event) => submit(event, "shows", showForm, () => setShowForm({ theatreId: rowId(theatres[0]) || "", screenId: rowId(screens[0]) || "", movieId: rowId(movies[0]) || "", showDate: "", showTime: "", price: 250, status: "active" }))}>
+          <SelectField label="Movie" value={showForm.movieId} options={movies.map((item) => ({ value: rowId(item), label: item.title }))} onChange={(value) => setShowForm({ ...showForm, movieId: value })} />
+          <SelectField label="Theatre" value={showForm.theatreId} options={theatres.map((item) => ({ value: rowId(item), label: item.theatre_name || item.name }))} onChange={(value) => setShowForm({ ...showForm, theatreId: value })} />
+          <SelectField label="Screen" value={showForm.screenId} options={screens.map((item) => ({ value: rowId(item), label: item.screen_name || item.name }))} onChange={(value) => setShowForm({ ...showForm, screenId: value })} />
           <Field label="Show date" type="date" value={showForm.showDate} onChange={(value) => setShowForm({ ...showForm, showDate: value })} />
           <Field label="Show time" type="time" value={showForm.showTime} onChange={(value) => setShowForm({ ...showForm, showTime: value })} />
           <Field label="Price" type="number" value={showForm.price} onChange={(value) => setShowForm({ ...showForm, price: value })} />
@@ -947,7 +1079,7 @@ function StaffPage({ staff, reload }) {
       </article>
       <section className="vendor-panel vendor-page-panel">
         <PanelTitle title="Staff Management" right="Access" />
-        <div className="staff-list">{staff.map((person) => <div className="staff-card" key={person._id}><UserCheck size={24} /><div><strong>{person.name}</strong><span>{person.role} · {person.mobile || person.email || "-"}</span></div><div className="vendor-row-actions"><button onClick={() => toggle(person, { status: person.status === "active" ? "inactive" : "active" })}>{person.status === "active" ? "Deactivate" : "Activate"}</button><button onClick={() => toggle(person, { loginPermission: !person.loginPermission })}>{person.loginPermission ? "Disable Login" : "Enable Login"}</button></div></div>)}</div>
+        <div className="staff-list">{staff.map((person) => <div className="staff-card" key={person._id}><UserCheck size={24} /><div><strong>{person.name}</strong><span>{person.role} - {person.mobile || person.email || "-"}</span></div><div className="vendor-row-actions"><button onClick={() => toggle(person, { status: person.status === "active" ? "inactive" : "active" })}>{person.status === "active" ? "Deactivate" : "Activate"}</button><button onClick={() => toggle(person, { loginPermission: !person.loginPermission })}>{person.loginPermission ? "Disable Login" : "Enable Login"}</button></div></div>)}</div>
       </section>
     </section>
   );
@@ -1120,6 +1252,22 @@ function MiniCount({ label, value }) {
   return <article className="vendor-kpi-card"><div><p>{label}</p><h2>{value || 0}</h2><span>Production module</span></div></article>;
 }
 
+function WeeklyMovieBookingChart({ data }) {
+  const maxValue = Math.max(...data.map((item) => Number(item.value || 0)), 1);
+
+  return (
+    <div className="movie-weekly-chart" aria-label="Weekly movie booking chart">
+      {data.map((item) => (
+        <div className="movie-weekly-bar" key={item.day}>
+          <strong>{item.value || 0}</strong>
+          <span style={{ height: `${Math.max((Number(item.value || 0) / maxValue) * 100, item.value ? 12 : 4)}%` }} />
+          <small>{item.day}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Field({ label, value, onChange, type = "text" }) {
   return <label><span>{label}</span><input type={type} value={value || ""} onChange={(event) => onChange(event.target.value)} /></label>;
 }
@@ -1131,6 +1279,10 @@ function SelectField({ label, value, options, onChange }) {
 
 function labelize(value) {
   return String(value || "").replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function rowId(row) {
+  return row?._id || row?.id || "";
 }
 
 function InfoGroup({ title, rows }) {

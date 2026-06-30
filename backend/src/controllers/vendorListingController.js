@@ -12,6 +12,8 @@ const Theatre = require("../models/Theatre");
 const Screen = require("../models/Screen");
 const Show = require("../models/Show");
 const SeatBlock = require("../models/SeatBlock");
+const User = require("../models/User");
+const { pool } = require("../config/db");
 const { emitVendorUpdated } = require("../socket");
 
 const moduleTitles = {
@@ -100,6 +102,12 @@ const generateSeatLayout = (totalSeats, prices = {}, counts = {}) => {
   const primeSeats = Math.min(numberValue(counts.primeSeats), Math.max(total - vipSeats, 0));
   const normalizedRegularSeats = Math.max(total - vipSeats - primeSeats, 0);
   const blockedLimit = Math.min(numberValue(counts.blockedSeats), total);
+  const blockedByType = {
+    vip: Math.min(numberValue(counts.blockedVipSeats), vipSeats),
+    prime: Math.min(numberValue(counts.blockedPrimeSeats), primeSeats),
+    regular: Math.min(numberValue(counts.blockedRegularSeats), normalizedRegularSeats),
+  };
+  const hasTypedBlocks = Object.values(blockedByType).some((value) => value > 0);
   const sections = [
     { sectionName: "VIP Rows", seatType: "vip", count: vipSeats, seatsPerRow: 10, price: numberValue(prices.vipSeatPrice) },
     { sectionName: "Prime Rows", seatType: "prime", count: primeSeats, seatsPerRow: 10, price: numberValue(prices.premiumSeatPrice || prices.primeSeatPrice) },
@@ -109,6 +117,7 @@ const generateSeatLayout = (totalSeats, prices = {}, counts = {}) => {
   let created = 0;
   let rowIndex = 0;
   let blockedCreated = 0;
+  const typedBlockedCreated = { vip: 0, prime: 0, regular: 0 };
 
   sections.forEach((section) => {
     const rows = [];
@@ -117,8 +126,11 @@ const generateSeatLayout = (totalSeats, prices = {}, counts = {}) => {
       const seatsInRow = Math.min(section.seatsPerRow, section.count - sectionCreated, total - created);
       const seats = Array.from({ length: seatsInRow }, (_, index) => {
         const seatNumber = String(index + 1).padStart(2, "0");
-        const isBlocked = blockedCreated < blockedLimit;
-        if (isBlocked) blockedCreated += 1;
+        const isTypedBlocked = typedBlockedCreated[section.seatType] < blockedByType[section.seatType];
+        const isLegacyBlocked = !hasTypedBlocks && blockedCreated < blockedLimit;
+        const isBlocked = isTypedBlocked || isLegacyBlocked;
+        if (isTypedBlocked) typedBlockedCreated[section.seatType] += 1;
+        if (isLegacyBlocked) blockedCreated += 1;
         return {
           row_name: rowName,
           seat_number: seatNumber,
@@ -126,6 +138,7 @@ const generateSeatLayout = (totalSeats, prices = {}, counts = {}) => {
           seat_type: section.seatType,
           price: section.price,
           status: isBlocked ? "blocked" : "available",
+          blocked_seat_type: isBlocked ? section.seatType : "",
         };
       });
       rows.push({ row_name: rowName, seats });
@@ -219,7 +232,14 @@ const prepareMoviePayload = (req, existing = {}) => {
   const vipSeats = Math.min(numberValue(req.body.vipSeats || existing.vipSeats || 0), totalSeats);
   const primeSeats = Math.min(numberValue(req.body.primeSeats || existing.primeSeats || 0), Math.max(totalSeats - vipSeats, 0));
   const regularSeats = Math.max(totalSeats - vipSeats - primeSeats, 0);
-  const blockedSeats = numberValue(req.body.blockedSeats || existing.blockedSeats || 0);
+  const blockedRegularInput = Object.prototype.hasOwnProperty.call(req.body, "blockedRegularSeats") ? req.body.blockedRegularSeats : existing.blockedRegularSeats;
+  const blockedPrimeInput = Object.prototype.hasOwnProperty.call(req.body, "blockedPrimeSeats") ? req.body.blockedPrimeSeats : existing.blockedPrimeSeats;
+  const blockedVipInput = Object.prototype.hasOwnProperty.call(req.body, "blockedVipSeats") ? req.body.blockedVipSeats : existing.blockedVipSeats;
+  const blockedRegularSeats = Math.min(numberValue(blockedRegularInput), regularSeats);
+  const blockedPrimeSeats = Math.min(numberValue(blockedPrimeInput), primeSeats);
+  const blockedVipSeats = Math.min(numberValue(blockedVipInput), vipSeats);
+  const typedBlockedSeats = blockedRegularSeats + blockedPrimeSeats + blockedVipSeats;
+  const blockedSeats = typedBlockedSeats || numberValue(req.body.blockedSeats || existing.blockedSeats || 0);
   const theatreName = req.body.theatreName || req.body.theatre || existing.theatreName || existing.theatre || "";
 
   return {
@@ -246,6 +266,9 @@ const prepareMoviePayload = (req, existing = {}) => {
     primeSeats,
     vipSeats,
     blockedSeats,
+    blockedRegularSeats,
+    blockedPrimeSeats,
+    blockedVipSeats,
     ticketPrice: regularSeatPrice,
     regularSeatPrice,
     primeSeatPrice: numberValue(req.body.primeSeatPrice || req.body.premiumSeatPrice || existing.primeSeatPrice || existing.premiumSeatPrice || 0),
@@ -264,6 +287,9 @@ const prepareMoviePayload = (req, existing = {}) => {
         primeSeats,
         vipSeats,
         blockedSeats,
+        blockedRegularSeats,
+        blockedPrimeSeats,
+        blockedVipSeats,
       }),
     averageRating: numberValue(existing.averageRating || req.body.averageRating || 0),
     totalReviews: numberValue(existing.totalReviews || req.body.totalReviews || 0),
@@ -274,6 +300,106 @@ const prepareMoviePayload = (req, existing = {}) => {
 const getVendorMovies = async (req, res) => {
   const movies = await Movie.find(vendorQuery(req)).sort({ createdAt: -1 });
   res.json(movies);
+};
+
+const getVendorProfile = async (req, res) => {
+  const user = await User.findById(req.user.id);
+  if (!user) return res.status(404).json({ message: "Vendor profile not found" });
+  const safeUser = user.toObject ? user.toObject() : { ...user };
+  delete safeUser.password;
+  delete safeUser.resetPasswordToken;
+  delete safeUser.resetPasswordExpires;
+  res.json({ user: safeUser });
+};
+
+const getVendorDashboard = async (req, res) => {
+  const query = vendorQuery(req);
+  const [user, movies, shows, bookings] = await Promise.all([
+    User.findById(req.user.id),
+    Movie.find(query).sort({ createdAt: -1 }),
+    Show.find(query).sort({ createdAt: -1 }),
+    Booking.find({ module: "movie", ...query }).populate("user", "name email mobile phone").sort({ createdAt: -1 }).limit(50),
+  ]);
+
+  const today = new Date();
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  startOfWeek.setHours(0, 0, 0, 0);
+  const bookingOverview = Array.from({ length: 7 }, () => 0);
+
+  bookings.forEach((booking) => {
+    const created = new Date(booking.createdAt || booking.bookingDate || Date.now());
+    if (created >= startOfWeek) {
+      const dayIndex = (created.getDay() + 6) % 7;
+      bookingOverview[dayIndex] += 1;
+    }
+  });
+
+  const bookingStatus = bookings.reduce((acc, booking) => {
+    const status = String(booking.status || booking.bookingStatus || "pending").toLowerCase();
+    if (status.includes("confirm")) acc.confirmed += 1;
+    else if (status.includes("complete")) acc.completed += 1;
+    else if (status.includes("cancel")) acc.cancelled += 1;
+    else acc.pending += 1;
+    return acc;
+  }, { confirmed: 0, pending: 0, completed: 0, cancelled: 0 });
+
+  const totalRevenue = bookings.reduce((sum, booking) => sum + Number(booking.amount || booking.totalAmount || 0), 0);
+  const totalSeats = movies.reduce((sum, movie) => sum + Number(movie.totalSeats || 0), 0);
+  let bookedSeats = bookings.reduce((sum, booking) => sum + (Array.isArray(booking.seats) ? booking.seats.length : 0), 0);
+  let blockedSeats = movies.reduce((sum, movie) => sum + Number(movie.blockedSeats || 0), 0);
+
+  const movieIds = movies.map((movie) => String(movie._id));
+  if (movieIds.length) {
+    try {
+      const [seatRows] = await pool.query(
+        `SELECT SUM(status = 'booked') AS bookedSeats, SUM(status = 'blocked') AS blockedSeats
+         FROM seats
+         WHERE movie_id IN (?)`,
+        [movieIds]
+      );
+      bookedSeats = Number(seatRows[0]?.bookedSeats || bookedSeats);
+      blockedSeats = Number(seatRows[0]?.blockedSeats || blockedSeats);
+    } catch {
+      // Dashboard still works from booking/movie aggregates if SQL seats are not initialized.
+    }
+  }
+
+  const safeUser = user?.toObject ? user.toObject() : {};
+  delete safeUser.password;
+  delete safeUser.resetPasswordToken;
+  delete safeUser.resetPasswordExpires;
+
+  res.json({
+    vendor: {
+      ...safeUser,
+      name: safeUser.name || "Vendor",
+      roleLabel: safeUser.role === "vendor" ? "Movie Vendor" : safeUser.role,
+      serviceType: safeUser.serviceType || safeUser.service || safeUser.module || "movie",
+    },
+    stats: {
+      totalMovies: movies.length,
+      totalBookings: bookings.length,
+      totalRevenue,
+      totalShows: shows.length || movies.reduce((sum, movie) => sum + (Array.isArray(movie.showTimes) ? movie.showTimes.length : movie.showTime ? 1 : 0), 0),
+      totalSeats,
+      bookedSeats,
+      blockedSeats,
+      occupancy: totalSeats ? Number(((bookedSeats / totalSeats) * 100).toFixed(1)) : 0,
+    },
+    bookingStatus,
+    bookingOverview,
+    recentBookings: bookings.slice(0, 8).map((booking) => ({
+      _id: booking._id,
+      bookingId: booking.bookingCode || booking.bookingId || booking._id,
+      movie: booking.title || booking.details?.movie?.title || booking.details?.movieTitle || "Movie",
+      showTime: booking.details?.showTime || booking.showTime || booking.details?.show?.showTime || "",
+      customer: booking.customerName || booking.user?.name || booking.details?.customerName || "Customer",
+      seats: booking.seats || booking.details?.seats || [],
+      amount: booking.amount || booking.totalAmount || 0,
+      status: booking.status || booking.bookingStatus || "pending",
+    })),
+  });
 };
 
 const createVendorMovie = async (req, res) => {
@@ -483,9 +609,30 @@ const getVendorReports = async (req, res) => {
       return date.getMonth() === month && date.getFullYear() === year;
     })
     .reduce((sum, booking) => sum + Number(booking.amount || 0), 0);
-  const bookedSeats = movies.reduce((sum, movie) => sum + Number(movie.bookedSeats?.length || 0), 0);
   const totalMovieSeats = movies.reduce((sum, movie) => sum + Number(movie.totalSeats || 0), 0);
-  const blockedSeats = seatBlocks.filter((seat) => seat.status === "blocked").length;
+  let bookedSeats = movies.reduce((sum, movie) => sum + Number(movie.bookedSeats?.length || 0), 0);
+  let blockedSeats = seatBlocks.filter((seat) => seat.status === "blocked").length;
+  let liveAvailableSeats = null;
+  if (movieIds.length) {
+    try {
+      const [seatRows] = await pool.query(
+        `SELECT
+           SUM(status = 'booked') AS bookedSeats,
+           SUM(status = 'blocked') AS blockedSeats,
+           SUM(status = 'available') AS availableSeats
+         FROM seats
+         WHERE movie_id IN (?)`,
+        [movieIds.map((movieId) => String(movieId))]
+      );
+      if (seatRows[0]) {
+        bookedSeats = Number(seatRows[0].bookedSeats || bookedSeats);
+        blockedSeats = Number(seatRows[0].blockedSeats || blockedSeats);
+        liveAvailableSeats = Number(seatRows[0].availableSeats || 0);
+      }
+    } catch {
+      liveAvailableSeats = null;
+    }
+  }
   const removedSeats = seatBlocks.filter((seat) => seat.status === "removed").length;
   const allListings = [...movies.map((movie) => ({ module: "movie", status: movie.status || "active" })), ...listings];
   const moduleCounts = allListings.reduce((acc, listing) => {
@@ -517,7 +664,7 @@ const getVendorReports = async (req, res) => {
     totalSeats: totalMovieSeats,
     bookedSeats,
     blockedSeats,
-    availableSeats: Math.max(totalMovieSeats - bookedSeats - blockedSeats - removedSeats, 0),
+    availableSeats: liveAvailableSeats ?? Math.max(totalMovieSeats - bookedSeats - blockedSeats - removedSeats, 0),
     moduleCounts,
   });
 };
@@ -567,6 +714,12 @@ const buildSeatsFromMovie = async (req, movie) => {
   const primeSeats = Math.min(Number(movie.primeSeats || 0), Math.max(totalSeats - vipSeats, 0));
   const regularSeats = Math.max(totalSeats - vipSeats - primeSeats, 0);
   const blockedLimit = Math.min(Number(movie.blockedSeats || 0), totalSeats);
+  const blockedByType = {
+    vip: Math.min(Number(movie.blockedVipSeats || 0), vipSeats),
+    prime: Math.min(Number(movie.blockedPrimeSeats || 0), primeSeats),
+    regular: Math.min(Number(movie.blockedRegularSeats || 0), regularSeats),
+  };
+  const hasTypedBlocks = Object.values(blockedByType).some((value) => value > 0);
   const prices = {
     vip: Number(movie.vipSeatPrice || movie.ticketPrice || 0),
     prime: Number(movie.primeSeatPrice || movie.premiumSeatPrice || movie.ticketPrice || 0),
@@ -581,6 +734,7 @@ const buildSeatsFromMovie = async (req, movie) => {
   const seats = [];
   let rowIndex = 0;
   let blockedCreated = 0;
+  const typedBlockedCreated = { vip: 0, prime: 0, regular: 0 };
 
   sections.forEach((section) => {
     for (let sectionCreated = 0; sectionCreated < section.count;) {
@@ -588,14 +742,18 @@ const buildSeatsFromMovie = async (req, movie) => {
       const seatsInRow = Math.min(seatsPerRow, section.count - sectionCreated);
       for (let seatIndex = 1; seatIndex <= seatsInRow; seatIndex += 1) {
         const seatNumber = `${row}${String(seatIndex).padStart(2, "0")}`;
-        const isBlocked = blockedCreated < blockedLimit;
-        if (isBlocked) blockedCreated += 1;
+        const isTypedBlocked = typedBlockedCreated[section.seatType] < blockedByType[section.seatType];
+        const isLegacyBlocked = !hasTypedBlocks && blockedCreated < blockedLimit;
+        const isBlocked = isTypedBlocked || isLegacyBlocked;
+        if (isTypedBlocked) typedBlockedCreated[section.seatType] += 1;
+        if (isLegacyBlocked) blockedCreated += 1;
         seats.push({
           seatNumber,
           seatNo: seatNumber,
           rowName: row,
           seatType: section.seatType,
           status: isBlocked ? "blocked" : "available",
+          blockedSeatType: isBlocked ? section.seatType : "",
           customerName: "",
           bookingId: null,
           mobile: "",
@@ -1310,6 +1468,8 @@ module.exports = {
   getVendorMovieDashboard,
   getVendorMovieDetails,
   getVendorMovies,
+  getVendorDashboard,
+  getVendorProfile,
   getVendorPassengers,
   getVendorReports,
   addMovieSeat,

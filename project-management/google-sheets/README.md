@@ -19,7 +19,17 @@ Recommended tab order:
 13. Deployment_Tracker.csv
 14. Risks_And_Blockers.csv
 15. Team_Productivity.csv
+16. Day_Wise_Work_Distribution.csv
+17. Project_Roadmap_Daily_Update_Master.csv
+18. Milestone_Roadmap.csv
+19. Final_Submission_Checklist.csv
+20. Next_Week_Work.csv
+21. Daily_Updates_With_Next_Week.csv
 
 The master Markdown source remains:
 
 `project-management/TixHub_Project_Management_GoogleSheets.md`
+
+Additional roadmap/report source:
+
+`project-management/TixHub_Project_Roadmap_Daily_Updates_Final_Submission.md`

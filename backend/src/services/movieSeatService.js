@@ -30,6 +30,7 @@ const mapSeat = (row) => ({
   bookingDate: row.booking_date || "",
   blockedBy: row.blocked_by,
   blockedReason: row.blocked_reason || "",
+  blockedSeatType: row.blocked_seat_type || "",
   updatedAt: row.updated_at,
 });
 
@@ -48,7 +49,13 @@ const buildSeatLayout = (context = {}, movie = null) => {
   const vipCount = Math.min(Number(context.vipSeats ?? movie?.vipSeats ?? 0), total);
   const primeCount = Math.min(Number(context.primeSeats ?? movie?.primeSeats ?? 0), Math.max(total - vipCount, 0));
   const regularCount = Math.max(total - vipCount - primeCount, 0);
-  const blockedLimit = Math.min(Number(context.blockedSeats ?? movie?.blockedSeats ?? 0), total);
+  const blockedByType = {
+    vip: Math.min(Number(context.blockedVipSeats ?? movie?.blockedVipSeats ?? 0), vipCount),
+    prime: Math.min(Number(context.blockedPrimeSeats ?? movie?.blockedPrimeSeats ?? 0), primeCount),
+    regular: Math.min(Number(context.blockedRegularSeats ?? movie?.blockedRegularSeats ?? 0), regularCount),
+  };
+  const legacyBlockedLimit = Math.min(Number(context.blockedSeats ?? movie?.blockedSeats ?? 0), total);
+  const hasTypedBlocks = Object.values(blockedByType).some((value) => value > 0);
   const prices = {
     vip: Number(context.vipSeatPrice || movie?.vipSeatPrice || context.price || movie?.ticketPrice || 0),
     prime: Number(context.premiumSeatPrice || context.primeSeatPrice || movie?.premiumSeatPrice || movie?.primeSeatPrice || context.price || movie?.ticketPrice || 0),
@@ -61,7 +68,8 @@ const buildSeatLayout = (context = {}, movie = null) => {
   ];
   const seats = [];
   let rowIndex = 0;
-  let blockedCreated = 0;
+  let legacyBlockedCreated = 0;
+  const typedBlockedCreated = { vip: 0, prime: 0, regular: 0 };
 
   for (const section of seatSections) {
     for (let sectionCreated = 0; sectionCreated < section.count && seats.length < total;) {
@@ -69,8 +77,11 @@ const buildSeatLayout = (context = {}, movie = null) => {
       const seatsInRow = Math.min(section.seatsPerRow, section.count - sectionCreated, total - seats.length);
       for (let seatIndex = 1; seatIndex <= seatsInRow; seatIndex += 1) {
         const seatNumber = String(seatIndex).padStart(2, "0");
-        const isBlocked = blockedCreated < blockedLimit;
-        if (isBlocked) blockedCreated += 1;
+        const isTypedBlocked = typedBlockedCreated[section.seatType] < blockedByType[section.seatType];
+        const isLegacyBlocked = !hasTypedBlocks && legacyBlockedCreated < legacyBlockedLimit;
+        const isBlocked = isTypedBlocked || isLegacyBlocked;
+        if (isTypedBlocked) typedBlockedCreated[section.seatType] += 1;
+        if (isLegacyBlocked) legacyBlockedCreated += 1;
         seats.push({
           rowName,
           seatNumber,
@@ -78,6 +89,7 @@ const buildSeatLayout = (context = {}, movie = null) => {
           seatType: section.seatType,
           price: prices[section.seatType],
           status: isBlocked ? "blocked" : "available",
+          blockedSeatType: isBlocked ? section.seatType : "",
         });
       }
       sectionCreated += seatsInRow;
@@ -109,9 +121,11 @@ const ensureShowSeats = async (context = {}) => {
   const seats = buildSeatLayout(context, movie);
   const [existingSeats] = await pool.query("SELECT seat_no, seat_type, status FROM seats WHERE show_id = ?", [showId]);
 
-  if (existingSeats.length && !seatLayoutMatches(existingSeats, seats)) {
+  if (existingSeats.length) {
     const hasBookedSeats = existingSeats.some((seat) => seat.status === "booked");
-    if (!hasBookedSeats) {
+    const desiredBySeat = new Map(seats.map((seat) => [seat.seatNo, seat.status]));
+    const statusMismatch = existingSeats.some((seat) => desiredBySeat.get(seat.seat_no) && desiredBySeat.get(seat.seat_no) !== seat.status);
+    if (!hasBookedSeats && (!seatLayoutMatches(existingSeats, seats) || statusMismatch)) {
       await pool.query("DELETE FROM seats WHERE show_id = ?", [showId]);
     }
   }
@@ -127,11 +141,12 @@ const ensureShowSeats = async (context = {}) => {
     seat.seatType,
     seat.price,
     seat.status,
+    seat.blockedSeatType || null,
   ]);
 
   await pool.query(
     `INSERT IGNORE INTO seats (
-      row_name, seat_number, seat_no, show_id, movie_id, theatre_id, screen_id, seat_type, price, status
+      row_name, seat_number, seat_no, show_id, movie_id, theatre_id, screen_id, seat_type, price, status, blocked_seat_type
     ) VALUES ?`,
     [values]
   );
@@ -190,7 +205,8 @@ const markMovieSeatsBooked = async (context, seats, booking, customer) => {
            booked_by = ?,
            booking_id = ?,
            blocked_by = NULL,
-           blocked_reason = NULL
+           blocked_reason = NULL,
+           blocked_seat_type = NULL
        WHERE show_id = ? AND seat_no IN (?)`,
       [
         booking.user,
@@ -213,7 +229,7 @@ const markMovieSeatsBooked = async (context, seats, booking, customer) => {
   return updatedRows.map(mapSeat);
 };
 
-const setMovieSeatBlocked = async (context, seatNumber, user, reason = "") => {
+const setMovieSeatBlocked = async (context, seatNumber, user, reason = "", blockedSeatType = "") => {
   const { showId } = await ensureShowSeats(context);
   const normalizedSeat = seatNo(seatNumber);
   const connection = await pool.getConnection();
@@ -238,9 +254,9 @@ const setMovieSeatBlocked = async (context, seatNumber, user, reason = "") => {
 
     await connection.query(
       `UPDATE seats
-       SET status = 'blocked', blocked_by = ?, blocked_reason = ?, booking_id = NULL
+       SET status = 'blocked', blocked_by = ?, blocked_reason = ?, blocked_seat_type = ?, booking_id = NULL
        WHERE show_id = ? AND seat_no = ?`,
-      [user.id, reason || "Blocked by vendor", showId, normalizedSeat]
+      [user.id, reason || "Blocked by vendor", blockedSeatType || current.seat_type || "regular", showId, normalizedSeat]
     );
     await connection.commit();
   } catch (error) {
@@ -277,7 +293,8 @@ const setMovieSeatAvailable = async (context, seatNumber) => {
     `UPDATE seats
      SET status = 'available',
          blocked_by = NULL,
-         blocked_reason = NULL
+         blocked_reason = NULL,
+         blocked_seat_type = NULL
      WHERE show_id = ? AND seat_no = ?`,
     [showId, normalizedSeat]
   );

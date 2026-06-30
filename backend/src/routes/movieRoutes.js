@@ -38,13 +38,21 @@ const normalizeMoviePayload = (body) => {
   const totalSeats = numberValue(body.totalSeats);
   const vipSeats = Math.min(numberValue(body.vipSeats), totalSeats);
   const primeSeats = Math.min(numberValue(body.primeSeats), Math.max(totalSeats - vipSeats, 0));
+  const regularSeats = Math.max(totalSeats - vipSeats - primeSeats, 0);
+  const blockedVipSeats = Math.min(numberValue(body.blockedVipSeats), vipSeats);
+  const blockedPrimeSeats = Math.min(numberValue(body.blockedPrimeSeats), primeSeats);
+  const blockedRegularSeats = Math.min(numberValue(body.blockedRegularSeats), regularSeats);
+  const typedBlockedSeats = blockedVipSeats + blockedPrimeSeats + blockedRegularSeats;
   return {
     ...body,
     totalSeats,
     vipSeats,
     primeSeats,
-    regularSeats: Math.max(totalSeats - vipSeats - primeSeats, 0),
-    blockedSeats: numberValue(body.blockedSeats),
+    regularSeats,
+    blockedVipSeats,
+    blockedPrimeSeats,
+    blockedRegularSeats,
+    blockedSeats: typedBlockedSeats || numberValue(body.blockedSeats),
     regularSeatPrice: numberValue(body.regularSeatPrice || body.ticketPrice),
     primeSeatPrice: numberValue(body.primeSeatPrice || body.premiumSeatPrice),
     premiumSeatPrice: numberValue(body.premiumSeatPrice || body.primeSeatPrice),

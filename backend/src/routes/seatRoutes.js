@@ -32,6 +32,9 @@ const contextFromRequest = (req) => {
     primeSeats: req.query.primeSeats || body.primeSeats,
     vipSeats: req.query.vipSeats || body.vipSeats,
     blockedSeats: req.query.blockedSeats || body.blockedSeats,
+    blockedRegularSeats: req.query.blockedRegularSeats || body.blockedRegularSeats,
+    blockedPrimeSeats: req.query.blockedPrimeSeats || body.blockedPrimeSeats,
+    blockedVipSeats: req.query.blockedVipSeats || body.blockedVipSeats,
     price: req.query.price || body.price,
     regularSeatPrice: req.query.regularSeatPrice || body.regularSeatPrice,
     premiumSeatPrice: req.query.premiumSeatPrice || body.premiumSeatPrice,
@@ -45,7 +48,7 @@ router.get("/seats/:showId", requireAuth, asyncHandler(async (req, res) => {
 }));
 
 router.patch("/seats/block", requireAuth, requireRole("admin", "vendor"), asyncHandler(async (req, res) => {
-  const seat = await setMovieSeatBlocked(contextFromRequest(req), req.body.seatNo || req.body.seatNumber, req.user, req.body.blockedReason);
+  const seat = await setMovieSeatBlocked(contextFromRequest(req), req.body.seatNo || req.body.seatNumber, req.user, req.body.blockedReason, req.body.blockedSeatType);
   res.json({ message: "Seat blocked", seat });
 }));
 

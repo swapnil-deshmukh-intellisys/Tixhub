@@ -202,6 +202,97 @@
   margin-bottom:22px;
 }
 
+.vendor-welcome{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  margin-bottom:18px;
+}
+
+.vendor-welcome h1{
+  color:#203528;
+  font-size:28px;
+  line-height:1.2;
+  margin:0 0 4px;
+}
+
+.vendor-welcome p{
+  color:#6f8176;
+  font-size:16px;
+  font-weight:900;
+  margin:0;
+}
+
+.vendor-service-card-grid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:16px;
+  margin-bottom:22px;
+}
+
+.vendor-service-card{
+  border:1px solid #e4f2ea;
+  border-radius:18px;
+  background:#ffffff;
+  color:#203528;
+  min-width:0;
+  min-height:150px;
+  padding:16px;
+  display:grid;
+  gap:12px;
+  text-align:left;
+  cursor:pointer;
+  box-shadow:0 16px 38px rgba(33,86,54,0.08);
+}
+
+.vendor-service-card:hover{
+  border-color:#b9e5cb;
+  transform:translateY(-1px);
+}
+
+.vendor-service-icon{
+  width:46px;
+  height:46px;
+  border-radius:14px;
+  display:grid;
+  place-items:center;
+  background:#eaf8f0;
+  color:#238e55;
+}
+
+.vendor-service-card strong,
+.vendor-service-card b,
+.vendor-service-card small,
+.vendor-service-card i{
+  display:block;
+}
+
+.vendor-service-card strong{
+  font-size:14px;
+  font-weight:900;
+}
+
+.vendor-service-card b{
+  margin-top:5px;
+  font-size:24px;
+  line-height:1;
+}
+
+.vendor-service-card small{
+  margin-top:5px;
+  color:#819288;
+  font-weight:800;
+}
+
+.vendor-service-card i{
+  align-self:end;
+  color:#238e55;
+  font-style:normal;
+  font-weight:900;
+  font-size:12px;
+}
+
 .vendor-kpi-card,
 .vendor-panel{
   background:#ffffff;
@@ -642,7 +733,7 @@
 
 .management-grid{
   display:grid;
-  grid-template-columns:repeat(5,minmax(0,1fr));
+  grid-template-columns:repeat(2,minmax(0,1fr));
   gap:14px;
 }
 
@@ -764,14 +855,13 @@
 
 .vendor-seat-grid{
   display:grid;
-  grid-template-columns:repeat(8,44px);
+  grid-template-columns:repeat(auto-fill,minmax(48px,1fr));
   gap:10px;
-  overflow-x:auto;
   padding-bottom:2px;
 }
 
 .vendor-seat{
-  width:44px;
+  width:100%;
   height:38px;
   border:0;
   border-radius:10px;
@@ -785,6 +875,131 @@
 .vendor-seat.booked{background:#df5454;}
 .vendor-seat.blocked{background:#8f9a94;}
 .vendor-seat.selected{background:#f3c64a;color:#493b05;}
+
+.vendor-seat-sections{
+  display:grid;
+  gap:18px;
+}
+
+.vendor-seat-section{
+  border:1px solid #e8f2ec;
+  border-radius:16px;
+  background:#f8fcfa;
+  padding:14px;
+}
+
+.vendor-seat-section h3{
+  color:#263a2d;
+  font-size:14px;
+  margin:0 0 12px;
+}
+
+.seat-type-grid{
+  grid-template-columns:minmax(180px,260px);
+}
+
+.movie-add-action{
+  display:flex;
+  justify-content:flex-start;
+  margin-bottom:16px;
+}
+
+.movie-add-action .vendor-primary-action{
+  width:auto;
+  min-width:160px;
+  margin-top:0;
+  padding:0 22px;
+}
+
+.booking-status-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:18px;
+  margin-bottom:22px;
+}
+
+.movie-management-heading{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:18px;
+}
+
+.movie-management-heading > div{
+  min-width:0;
+}
+
+.movie-add-right-button{
+  width:auto;
+  min-width:144px;
+  min-height:44px;
+  margin-top:0;
+  padding:0 20px;
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+
+.movie-management-chart-grid{
+  display:grid;
+  grid-template-columns:minmax(280px,0.85fr) minmax(320px,1.15fr);
+  gap:20px;
+  align-items:stretch;
+  margin-bottom:22px;
+}
+
+.movie-management-list-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  margin-bottom:22px;
+}
+
+.movie-booking-chart-panel{
+  min-height:268px;
+}
+
+.movie-weekly-chart{
+  height:198px;
+  display:grid;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  gap:14px;
+  align-items:end;
+  padding:10px 4px 0;
+}
+
+.movie-weekly-bar{
+  height:100%;
+  display:grid;
+  grid-template-rows:24px 1fr 20px;
+  align-items:end;
+  gap:8px;
+  text-align:center;
+  min-width:0;
+}
+
+.movie-weekly-bar strong{
+  color:#263a2d;
+  font-size:12px;
+  font-weight:900;
+}
+
+.movie-weekly-bar span{
+  width:100%;
+  max-width:36px;
+  justify-self:center;
+  border-radius:10px 10px 4px 4px;
+  background:linear-gradient(180deg,#2fc978 0%,#16a34a 100%);
+  box-shadow:0 12px 24px rgba(22,163,74,0.2);
+}
+
+.movie-weekly-bar small{
+  color:#819288;
+  font-size:11px;
+  font-weight:900;
+}
+
+.theatre-screen-grid{
+  grid-template-columns:1fr 1fr;
+}
 
 .vendor-alert{
   border:1px solid #d9efe3;
@@ -1232,9 +1447,14 @@
 }
 
 @media(max-width:1180px){
+  .vendor-service-card-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+
   .vendor-card-grid,
   .vendor-dashboard-grid,
   .vendor-analytics-grid,
+  .movie-management-chart-grid,
   .vendor-operations-grid,
   .seat-management-page{
     grid-template-columns:repeat(2,minmax(0,1fr));
@@ -1277,8 +1497,11 @@
   }
 
   .vendor-card-grid,
+  .vendor-service-card-grid,
+  .booking-status-grid,
   .vendor-dashboard-grid,
   .vendor-analytics-grid,
+  .movie-management-chart-grid,
   .vendor-operations-grid,
   .seat-management-page,
   .scanner-page,
@@ -1297,13 +1520,22 @@
 }
 
 @media(max-width:560px){
+  .movie-management-heading{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+
+  .movie-add-right-button{
+    width:100%;
+  }
+
   .vendor-profile span:not(.vendor-avatar),
   .vendor-language{
     display:none;
   }
 
   .vendor-seat-grid{
-    grid-template-columns:repeat(4,44px);
+    grid-template-columns:repeat(4,minmax(0,1fr));
   }
 
   .quick-action-grid{

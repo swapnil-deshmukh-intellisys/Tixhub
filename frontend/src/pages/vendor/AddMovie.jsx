@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./AddMovie.css";
@@ -69,6 +69,9 @@ const emptyMovie = {
   vipSeats: 100,
   bookedSeats: 0,
   blockedSeats: 0,
+  blockedRegularSeats: 0,
+  blockedPrimeSeats: 0,
+  blockedVipSeats: 0,
   ticketPrice: 150,
   regularSeatPrice: 150,
   primeSeatPrice: 250,
@@ -91,6 +94,25 @@ const emptyMovie = {
 };
 
 const toNumber = (value) => Math.max(Number(value || 0), 0);
+
+const blockedTotal = (movie) =>
+  toNumber(movie.blockedRegularSeats) +
+  toNumber(movie.blockedPrimeSeats) +
+  toNumber(movie.blockedVipSeats);
+
+const normalizeMovieForForm = (source = {}) => {
+  const typedBlocked =
+    source.blockedRegularSeats !== undefined ||
+    source.blockedPrimeSeats !== undefined ||
+    source.blockedVipSeats !== undefined;
+
+  return {
+    ...source,
+    blockedRegularSeats: typedBlocked ? toNumber(source.blockedRegularSeats) : toNumber(source.blockedSeats),
+    blockedPrimeSeats: typedBlocked ? toNumber(source.blockedPrimeSeats) : 0,
+    blockedVipSeats: typedBlocked ? toNumber(source.blockedVipSeats) : 0,
+  };
+};
 
 const readFile = (file) =>
   new Promise((resolve, reject) => {
@@ -134,19 +156,44 @@ function AddMovie() {
   const navigate = useNavigate();
   const location = useLocation();
   const editMovie = location.state?.movie;
+  const editMovieId = location.state?.editMovieId || editMovie?._id;
 
   const [activeStep, setActiveStep] = useState(0);
   const [activeSection, setActiveSection] = useState("");
 
   const [movie, setMovie] = useState({
     ...emptyMovie,
-    ...(editMovie || {}),
+    ...normalizeMovieForForm(editMovie || {}),
     screens: editMovie?.screens?.length ? editMovie.screens : [emptyScreen],
     selectedScreenIndex: editMovie?.selectedScreenIndex || 0,
     offers: editMovie?.offers?.length ? editMovie.offers : [],
     castMembers: editMovie?.castMembers?.length ? editMovie.castMembers : [],
     crewMembers: editMovie?.crewMembers?.length ? editMovie.crewMembers : [],
   });
+
+  useEffect(() => {
+    if (!editMovieId || editMovie) return;
+    const loadMovie = async () => {
+      try {
+        const res = await axios.get(`http://localhost:5000/api/vendor/movies/${editMovieId}/details`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        });
+        const loaded = res.data || {};
+        setMovie({
+          ...emptyMovie,
+          ...normalizeMovieForForm(loaded),
+          screens: loaded.screens?.length ? loaded.screens : [emptyScreen],
+          selectedScreenIndex: loaded.selectedScreenIndex || 0,
+          offers: loaded.offers?.length ? loaded.offers : [],
+          castMembers: loaded.castMembers?.length ? loaded.castMembers : [],
+          crewMembers: loaded.crewMembers?.length ? loaded.crewMembers : [],
+        });
+      } catch (error) {
+        alert(error.response?.data?.message || "Unable to load movie for editing");
+      }
+    };
+    loadMovie();
+  }, [editMovieId, editMovie]);
 
   const [uploads, setUploads] = useState({
     poster: null,
@@ -175,17 +222,29 @@ function AddMovie() {
       return "Booked Seats cannot be greater than Total Seats.";
     }
 
-    if (toNumber(movie.blockedSeats) > toNumber(selectedScreen.totalSeats)) {
+    if (toNumber(movie.blockedRegularSeats) > toNumber(selectedScreen.regularSeats)) {
+      return "Blocked Regular Seats cannot be greater than Regular Seats.";
+    }
+
+    if (toNumber(movie.blockedPrimeSeats) > toNumber(selectedScreen.primeSeats)) {
+      return "Blocked Prime Seats cannot be greater than Prime Seats.";
+    }
+
+    if (toNumber(movie.blockedVipSeats) > toNumber(selectedScreen.vipSeats)) {
+      return "Blocked VIP Seats cannot be greater than VIP Seats.";
+    }
+
+    if (blockedTotal(movie) > toNumber(selectedScreen.totalSeats)) {
       return "Blocked Seats cannot be greater than Total Seats.";
     }
 
     return "";
-  }, [screenSeatTotal, selectedScreen, movie.bookedSeats, movie.blockedSeats]);
+  }, [screenSeatTotal, selectedScreen, movie.bookedSeats, movie.blockedRegularSeats, movie.blockedPrimeSeats, movie.blockedVipSeats]);
 
   const availableSeats =
     toNumber(selectedScreen.totalSeats) -
     toNumber(movie.bookedSeats) -
-    toNumber(movie.blockedSeats);
+    blockedTotal(movie);
 
   const updateField = (field, value) => {
     setMovie((current) => ({ ...current, [field]: value }));
@@ -297,6 +356,10 @@ function AddMovie() {
       regularSeats: selectedScreen.regularSeats,
       primeSeats: selectedScreen.primeSeats,
       vipSeats: selectedScreen.vipSeats,
+      blockedRegularSeats: toNumber(movie.blockedRegularSeats),
+      blockedPrimeSeats: toNumber(movie.blockedPrimeSeats),
+      blockedVipSeats: toNumber(movie.blockedVipSeats),
+      blockedSeats: blockedTotal(movie),
       screenName: selectedScreen.screenName,
       format: selectedScreen.screenType,
     };
@@ -331,9 +394,9 @@ function AddMovie() {
         uploads: uploadPayload,
       };
 
-      if (editMovie) {
+      if (editMovieId) {
         await axios.put(
-          `http://localhost:5000/api/vendor/movies/${editMovie._id}`,
+          `http://localhost:5000/api/vendor/movies/${editMovieId}`,
           payload,
           config
         );
@@ -471,6 +534,10 @@ function AddMovie() {
             <span>Regular <b>{toNumber(selectedScreen.regularSeats)}</b></span>
             <span>Prime <b>{toNumber(selectedScreen.primeSeats)}</b></span>
             <span>VIP <b>{toNumber(selectedScreen.vipSeats)}</b></span>
+            <span>Blocked Regular <b>{toNumber(movie.blockedRegularSeats)}</b></span>
+            <span>Blocked Prime <b>{toNumber(movie.blockedPrimeSeats)}</b></span>
+            <span>Blocked VIP <b>{toNumber(movie.blockedVipSeats)}</b></span>
+            <span>Total Blocked <b>{blockedTotal(movie)}</b></span>
             <span>Available <b>{Math.max(availableSeats, 0)}</b></span>
           </div>
 
@@ -479,7 +546,9 @@ function AddMovie() {
             <Field label="Prime Price" type="number" value={movie.primeSeatPrice} onChange={(value) => updateField("primeSeatPrice", value)} required />
             <Field label="VIP Price" type="number" value={movie.vipSeatPrice} onChange={(value) => updateField("vipSeatPrice", value)} required />
             <Field label="Booked Seats" type="number" value={movie.bookedSeats} onChange={(value) => updateField("bookedSeats", value)} />
-            <Field label="Blocked Seats" type="number" value={movie.blockedSeats} onChange={(value) => updateField("blockedSeats", value)} />
+            <Field label="Blocked Regular Seats" type="number" value={movie.blockedRegularSeats} onChange={(value) => updateField("blockedRegularSeats", value)} />
+            <Field label="Blocked Prime Seats" type="number" value={movie.blockedPrimeSeats} onChange={(value) => updateField("blockedPrimeSeats", value)} />
+            <Field label="Blocked VIP Seats" type="number" value={movie.blockedVipSeats} onChange={(value) => updateField("blockedVipSeats", value)} />
           </div>
 
           {seatError && <p className="seat-error">{seatError}</p>}
@@ -491,6 +560,9 @@ function AddMovie() {
               regularSeats: selectedScreen.regularSeats,
               primeSeats: selectedScreen.primeSeats,
               vipSeats: selectedScreen.vipSeats,
+              blockedRegularSeats: movie.blockedRegularSeats,
+              blockedPrimeSeats: movie.blockedPrimeSeats,
+              blockedVipSeats: movie.blockedVipSeats,
             }}
           />
         </div>
@@ -609,6 +681,9 @@ function AddMovie() {
           <span>Regular <b>{toNumber(selectedScreen.regularSeats)}</b></span>
           <span>Prime <b>{toNumber(selectedScreen.primeSeats)}</b></span>
           <span>VIP <b>{toNumber(selectedScreen.vipSeats)}</b></span>
+          <span>Blocked Regular <b>{toNumber(movie.blockedRegularSeats)}</b></span>
+          <span>Blocked Prime <b>{toNumber(movie.blockedPrimeSeats)}</b></span>
+          <span>Blocked VIP <b>{toNumber(movie.blockedVipSeats)}</b></span>
           <span>City <b>{movie.city || "-"}</b></span>
           <span>Status <b>{movie.status}</b></span>
         </div>
@@ -736,9 +811,9 @@ function FileField({ label, accept, multiple = false, onChange }) {
 
 function SeatPreview({ movie }) {
   const sections = [
-    { title: "Regular Seats", type: "regular", prefix: "A", count: movie.regularSeats, price: movie.regularSeatPrice },
-    { title: "Prime Seats", type: "prime", prefix: "P", count: movie.primeSeats, price: movie.primeSeatPrice },
-    { title: "VIP Seats", type: "vip", prefix: "V", count: movie.vipSeats, price: movie.vipSeatPrice },
+    { title: "Regular Seats", type: "regular", prefix: "A", count: movie.regularSeats, blocked: movie.blockedRegularSeats, price: movie.regularSeatPrice },
+    { title: "Prime Seats", type: "prime", prefix: "P", count: movie.primeSeats, blocked: movie.blockedPrimeSeats, price: movie.primeSeatPrice },
+    { title: "VIP Seats", type: "vip", prefix: "V", count: movie.vipSeats, blocked: movie.blockedVipSeats, price: movie.vipSeatPrice },
   ];
 
   return (
@@ -746,18 +821,21 @@ function SeatPreview({ movie }) {
       <div className="bms-screen">SCREEN</div>
 
       {sections.map((section) => {
-        const seats = Array.from({ length: Math.min(toNumber(section.count), 40) }, (_, index) => `${section.prefix}${index + 1}`);
+        const seats = Array.from({ length: Math.min(toNumber(section.count), 40) }, (_, index) => ({
+          seatNo: `${section.prefix}${index + 1}`,
+          blocked: index < toNumber(section.blocked),
+        }));
 
         return (
           <section className="bms-seat-section" key={section.type}>
             <div className="bms-section-title">
               <strong>{section.title}</strong>
-              <span>Rs {section.price || 0}</span>
+              <span>Rs {section.price || 0} | Blocked {toNumber(section.blocked)}</span>
             </div>
 
             <div className="bms-seat-numbers">
               {seats.map((seat) => (
-                <span className={section.type} key={seat}>{seat}</span>
+                <span className={`${section.type} ${seat.blocked ? "blocked" : ""}`} key={seat.seatNo}>{seat.seatNo}</span>
               ))}
             </div>
 

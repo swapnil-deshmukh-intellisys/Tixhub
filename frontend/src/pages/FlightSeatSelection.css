@@ -1,273 +1,330 @@
-.flight-seat-page{
-  min-height:auto;
-  background:transparent;
-  color:#0f172a;
-  padding:28px;
+.flight-seat-page {
+  padding: 26px;
+  color: #0f172a;
 }
 
-.flight-step-header{
-  background:white;
-  border:1px solid #e2e8f0;
-  border-radius:24px;
-  box-shadow:0 12px 30px rgba(15,23,42,0.06);
-  padding:22px;
-  display:flex;
-  align-items:center;
-  gap:18px;
-  margin-bottom:22px;
+.flight-step-header {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 22px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
 }
 
 .flight-step-header button,
-.flight-empty button{
-  width:46px;
-  height:46px;
-  border:none;
-  border-radius:14px;
-  background:#0f172a;
-  color:white;
-  cursor:pointer;
+.flight-empty button {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 14px;
+  background: #0f172a;
+  color: white;
+  cursor: pointer;
 }
 
-.flight-empty button{
-  width:auto;
-  min-width:150px;
-  padding:0 18px;
+.flight-step-header h1 {
+  font-size: 26px;
+  margin: 0 0 5px;
 }
 
-.flight-step-header h1{
-  font-size:28px;
-  margin-bottom:6px;
+.flight-step-header p {
+  color: #64748b;
+  margin: 0;
 }
 
-.flight-step-header p{
-  color:#64748b;
+.flight-seat-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 22px;
 }
 
-.flight-aircraft-shell{
-  display:grid;
-  grid-template-columns:minmax(0,1fr) 320px;
-  gap:22px;
+.aircraft-card,
+.seat-summary-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 26px;
+  padding: 24px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
 }
 
-.aircraft-map,
-.seat-pricing-card{
-  background:white;
-  border:1px solid #e2e8f0;
-  border-radius:24px;
-  padding:24px;
-  box-shadow:0 12px 30px rgba(15,23,42,0.06);
+.aircraft-card {
+  overflow-x: auto;
 }
 
-.aircraft-nose{
-  max-width:620px;
-  height:70px;
-  margin:0 auto 20px;
-  border-radius:100px 100px 16px 16px;
-  background:linear-gradient(135deg,#cbd5e1,#eef2f7);
-  color:#64748b;
-  font-weight:900;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
+.aircraft-front {
+  width: 260px;
+  height: 86px;
+  margin: 0 auto 16px;
+  border-radius: 130px 130px 28px 28px;
+  background: linear-gradient(180deg, #dbeafe, #f8fafc);
+  border: 1px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 900;
+  color: #2563eb;
 }
 
-.aircraft-columns{
-  width:max-content;
-  max-width:none;
-  margin:0 auto;
-  display:grid;
-  grid-template-columns:repeat(auto-fit,54px);
-  gap:10px;
-  align-items:center;
-  justify-content:center;
+.cabin-info {
+  max-width: 520px;
+  margin: 0 auto 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  padding: 12px 16px;
+  color: #475569;
+  font-weight: 800;
 }
 
-.aircraft-row{
-  width:max-content;
-  max-width:none;
-  margin:0 auto;
-  display:grid;
-  grid-template-columns:34px repeat(var(--seat-columns, 6),54px);
-  gap:10px;
-  align-items:center;
-  justify-content:center;
+.aircraft-body {
+  width: max-content;
+  min-width: 520px;
+  margin: 0 auto;
+  padding: 20px 28px 34px;
+  border-left: 4px solid #cbd5e1;
+  border-right: 4px solid #cbd5e1;
+  border-radius: 20px 20px 80px 80px;
+  background: #f8fafc;
 }
 
-.aircraft-columns{
-  color:#64748b;
-  font-weight:900;
-  margin-bottom:10px;
+.column-header,
+.row-seats {
+  display: flex;
+  justify-content: center;
+  gap: 44px;
 }
 
-.aircraft-columns span:nth-child(4){
-  margin-left:24px;
+.column-header {
+  margin-bottom: 12px;
+  color: #64748b;
+  font-weight: 900;
 }
 
-.aircraft-row{
-  margin-bottom:10px;
+.seat-group {
+  display: flex;
+  gap: 10px;
 }
 
-.aircraft-row-label{
-  color:#64748b;
-  font-weight:900;
+.column-header .seat-group span {
+  width: 44px;
+  text-align: center;
 }
 
-.flight-seat{
-  width:54px;
-  height:42px;
-  border:1px solid #10b981;
-  border-radius:10px;
-  background:white;
-  color:#047857;
-  font-size:12px;
-  font-weight:900;
-  cursor:pointer;
+.aircraft-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 34px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
-.flight-seat:nth-of-type(4){
-  margin-left:24px;
+.row-number {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
 }
 
-.flight-seat.window{
-  border-color:#0284c7;
-  color:#0284c7;
+.flight-seat {
+  width: 44px;
+  height: 46px;
+  border-radius: 12px 12px 8px 8px;
+  border: 2px solid #10b981;
+  background: #ffffff;
+  color: #047857;
+  cursor: pointer;
+  font-weight: 900;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
 }
 
-.flight-seat.middle{
-  border-color:#a855f7;
-  color:#7e22ce;
+.flight-seat svg {
+  font-size: 14px;
 }
 
-.flight-seat.aisle{
-  border-color:#10b981;
-  color:#047857;
+.flight-seat small {
+  font-size: 10px;
 }
 
-.flight-seat.selected{
-  background:#10b981;
-  border-color:#10b981;
-  color:white;
+.flight-seat.window {
+  border-color: #0284c7;
+  color: #0284c7;
 }
 
-.flight-seat.reserved{
-  background:#e2e8f0;
-  border-color:#cbd5e1;
-  color:#94a3b8;
-  cursor:not-allowed;
+.flight-seat.aisle {
+  border-color: #10b981;
+  color: #047857;
 }
 
-.seat-pricing-card h2{
-  font-size:24px;
-  margin-bottom:8px;
+.flight-seat.middle {
+  border-color: #a855f7;
+  color: #7e22ce;
 }
 
-.seat-pricing-card p,
-.selected-flight-seats span,
-.flight-seat-legend span{
-  color:#64748b;
+.flight-seat.selected {
+  background: #10b981;
+  border-color: #10b981;
+  color: white;
 }
 
-.seat-pricing-card strong{
-  display:block;
-  font-size:26px;
-  margin-bottom:20px;
+.flight-seat.reserved {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #94a3b8;
+  cursor: not-allowed;
 }
 
-.flight-seat-legend{
-  display:grid;
-  gap:12px;
-  margin-bottom:22px;
+.exit-row-label {
+  text-align: center;
+  margin: 16px 0 10px;
+  padding: 8px;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #ea580c;
+  font-weight: 900;
+  font-size: 13px;
 }
 
-.flight-seat-legend span{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  font-weight:800;
+.exit-row .flight-seat {
+  border-style: dashed;
 }
 
-.flight-seat-legend i{
-  width:18px;
-  height:18px;
-  border-radius:6px;
-  border:1px solid #10b981;
+.seat-summary-card {
+  height: fit-content;
+  position: sticky;
+  top: 20px;
 }
 
-.flight-seat-legend .reserved{
-  background:#e2e8f0;
-  border-color:#cbd5e1;
+.seat-summary-card h2 {
+  font-size: 24px;
+  margin: 0 0 18px;
 }
 
-.flight-seat-legend .selected{
-  background:#10b981;
+.summary-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 12px;
 }
 
-.flight-seat-legend .window{
-  border-color:#0284c7;
+.summary-box span {
+  display: block;
+  color: #64748b;
+  font-weight: 700;
+  margin-bottom: 5px;
 }
 
-.flight-seat-legend .middle{
-  border-color:#a855f7;
+.summary-box strong {
+  font-size: 18px;
 }
 
-.selected-flight-seats{
-  border-top:1px solid #e2e8f0;
-  padding-top:18px;
-  margin-bottom:18px;
+.seat-legend {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0;
 }
 
-.selected-flight-seats h3{
-  margin-top:6px;
+.seat-legend p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #475569;
+  font-weight: 800;
 }
 
-.seat-pricing-card button{
-  width:100%;
-  min-height:52px;
-  border:none;
-  border-radius:14px;
-  background:#ef4444;
-  color:white;
-  font-weight:900;
-  cursor:pointer;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
+.seat-legend i {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  display: inline-block;
+  border: 2px solid #10b981;
 }
 
-.seat-pricing-card button:disabled{
-  opacity:0.5;
-  cursor:not-allowed;
+.seat-legend .selected {
+  background: #10b981;
 }
 
-.flight-empty{
-  min-height:360px;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:18px;
-  background:#f8fafc;
+.seat-legend .reserved {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
 }
 
-@media(max-width:920px){
-  .flight-aircraft-shell{
-    grid-template-columns:1fr;
+.seat-legend .window {
+  border-color: #0284c7;
+}
+
+.seat-legend .aisle {
+  border-color: #10b981;
+}
+
+.seat-legend .middle {
+  border-color: #a855f7;
+}
+
+.seat-summary-card button {
+  width: 100%;
+  min-height: 52px;
+  border: none;
+  border-radius: 16px;
+  background: #16a34a;
+  color: white;
+  font-weight: 900;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.seat-summary-card button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flight-empty {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: #f8fafc;
+}
+
+.flight-empty button {
+  width: auto;
+  padding: 0 18px;
+}
+
+@media (max-width: 980px) {
+  .flight-seat-layout {
+    grid-template-columns: 1fr;
   }
 
-  .aircraft-map{
-    overflow-x:auto;
+  .seat-summary-card {
+    position: static;
   }
 }
 
-@media(max-width:640px){
-  .flight-seat-page{
-    padding:16px;
+@media (max-width: 640px) {
+  .flight-seat-page {
+    padding: 16px;
   }
 
-  .aircraft-seat-grid,
-  .aircraft-columns{
-    min-width:520px;
+  .flight-step-header h1 {
+    font-size: 22px;
   }
 }

@@ -90,7 +90,6 @@ function FlightDashboard({ stats, flights, bookings, revenue, loading, navigate 
     ["Today Bookings", stats.todayBookings || 0, CalendarDays],
     ["Total Passengers", stats.totalPassengers || bookings.length, Users],
     ["Total Revenue", `Rs ${stats.totalRevenue || revenue.totalRevenue || 0}`, BarChart3],
-    ["Pending Settlements", `Rs ${stats.pendingSettlements || revenue.pendingSettlement || 0}`, BarChart3],
     ["Available Seats", stats.availableSeats || 0, Ticket],
     ["Booked Seats", stats.bookedSeats || 0, Ticket],
     ["Blocked Seats", stats.blockedSeats || 0, Ticket],

@@ -108,6 +108,9 @@ const movieFromRow = (Model, row) =>
     primeSeats: Number(row.prime_seats || 0),
     vipSeats: Number(row.vip_seats || 0),
     blockedSeats: Number(row.blocked_seats || 0),
+    blockedRegularSeats: Number(row.blocked_regular_seats || 0),
+    blockedPrimeSeats: Number(row.blocked_prime_seats || 0),
+    blockedVipSeats: Number(row.blocked_vip_seats || 0),
     bookedSeats: parseJson(row.booked_seats, []),
     ticketPrice: Number(row.ticket_price || 240),
     status: row.status || "active",
@@ -392,7 +395,8 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               id, vendor_id, vendor, title, language, duration, image, poster_url, banner_url,
               description, theatre, theatre_name, theatre_city, theatre_address, screen_number,
               show_date, show_time, show_times, total_seats, regular_seats, prime_seats,
-              vip_seats, blocked_seats, booked_seats, ticket_price, status,
+              vip_seats, blocked_seats, blocked_regular_seats, blocked_prime_seats,
+              blocked_vip_seats, booked_seats, ticket_price, status,
               genre, cast, director, release_date, rating, hero, certificate, format, trailer_url,
               trailer_file_url, gallery_images, documents, interest_count, about_movie, screen_name,
               city, location, end_time, seat_layout, regular_seat_price, premium_seat_price,
@@ -400,7 +404,7 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               is_offer_applicable, offers, cast_members, crew_members,
               created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
               vendor_id = VALUES(vendor_id),
               vendor = VALUES(vendor),
@@ -424,6 +428,9 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               prime_seats = VALUES(prime_seats),
               vip_seats = VALUES(vip_seats),
               blocked_seats = VALUES(blocked_seats),
+              blocked_regular_seats = VALUES(blocked_regular_seats),
+              blocked_prime_seats = VALUES(blocked_prime_seats),
+              blocked_vip_seats = VALUES(blocked_vip_seats),
               booked_seats = VALUES(booked_seats),
               ticket_price = VALUES(ticket_price),
               status = VALUES(status),
@@ -481,6 +488,9 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               Number(document.primeSeats || 0),
               Number(document.vipSeats || 0),
               Number(document.blockedSeats || 0),
+              Number(document.blockedRegularSeats || 0),
+              Number(document.blockedPrimeSeats || 0),
+              Number(document.blockedVipSeats || 0),
               JSON.stringify(document.bookedSeats || []),
               Number(document.ticketPrice || 240),
               document.status || "active",

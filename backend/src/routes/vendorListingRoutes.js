@@ -25,6 +25,8 @@ const {
   getVendorMovieDashboard,
   getVendorMovieDetails,
   getVendorMovies,
+  getVendorDashboard,
+  getVendorProfile,
   getVendorReports,
   getVendorPassengers,
   addMovieSeat,
@@ -74,7 +76,9 @@ router.get("/vendor-listings", asyncHandler(getVendorListings));
 router.post("/vendor-listings", asyncHandler(createVendorListing));
 router.put("/vendor-listings/:id", asyncHandler(updateVendorListing));
 router.delete("/vendor-listings/:id", asyncHandler(deleteVendorListing));
+router.get("/vendor/dashboard", asyncHandler(getVendorDashboard));
 router.get("/vendor/movies", asyncHandler(getVendorMovies));
+router.get("/vendor/profile", asyncHandler(getVendorProfile));
 router.post("/vendor/movies", asyncHandler(createVendorMovie));
 router.get("/vendor/movies/dashboard/summary", asyncHandler(getVendorMovieDashboard));
 router.get("/vendor/movies/:id/details", asyncHandler(getVendorMovieDetails));

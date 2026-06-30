@@ -501,6 +501,13 @@
   color:#7e22ce;
 }
 
+.bms-seat-numbers span.blocked{
+  border-color:#ef4444;
+  background:#fee2e2;
+  color:#b91c1c;
+  text-decoration:line-through;
+}
+
 .seat-preview-more{
   margin:0;
   color:#64748b;
