@@ -17,6 +17,7 @@ const vendorListingRoutes = require("./src/routes/vendorListingRoutes");
 const vendorOperationsRoutes = require("./src/routes/vendorOperationsRoutes");
 const paymentRoutes = require("./src/routes/paymentRoutes");
 const seatRoutes = require("./src/routes/seatRoutes");
+const vendorServiceModuleRoutes = require("./src/routes/vendorServiceModuleRoutes");
 const { setIo } = require("./src/socket");
 
 const app = express();
@@ -58,6 +59,7 @@ app.use("/api", walletRoutes);
 app.use("/api", seatRoutes);
 app.use("/api", vendorOperationsRoutes);
 app.use("/api", vendorListingRoutes);
+app.use("/api", vendorServiceModuleRoutes);
 app.use("/api", paymentRoutes);
 console.log("Vendor listing routes mounted at /api/vendor-listings");
 app.use("/api/admin", adminRoutes);

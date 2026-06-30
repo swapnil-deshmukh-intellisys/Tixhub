@@ -129,6 +129,14 @@ function App() {
         }
       />
       <Route
+        path="/vendor/movies"
+        element={
+          <ProtectedRoute roles={["vendor", "admin"]}>
+            <MovieVendorDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/vendor/add-movie"
         element={
           <ProtectedRoute roles={["vendor", "admin"]}>

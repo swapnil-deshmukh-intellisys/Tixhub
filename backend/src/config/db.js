@@ -695,6 +695,7 @@ const ready = (async () => {
     await ensureSeatsSchema(connection);
     await ensureMovieProductionSchema(connection);
     await runSqlFile(connection, path.join(__dirname, "..", "..", "migrations", "2026-06-18-vendor-production-modules.sql"));
+    await runSqlFile(connection, path.join(__dirname, "..", "..", "migrations", "2026-06-30-vendor-service-modules.sql"));
     await migrateMovieRecords(connection);
     console.log("MySQL Connected");
     return true;

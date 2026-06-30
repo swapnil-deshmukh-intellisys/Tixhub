@@ -1,0 +1,82 @@
+CREATE TABLE IF NOT EXISTS vendor_buses (
+  id VARCHAR(24) NOT NULL PRIMARY KEY,
+  vendor_id VARCHAR(24) NOT NULL,
+  bus_name VARCHAR(255) NOT NULL,
+  bus_number VARCHAR(80) NOT NULL,
+  operator_name VARCHAR(255) NOT NULL,
+  from_city VARCHAR(150) NOT NULL,
+  to_city VARCHAR(150) NOT NULL,
+  departure_date_time DATETIME NOT NULL,
+  arrival_date_time DATETIME NOT NULL,
+  bus_type VARCHAR(80) NOT NULL,
+  total_seats INT NOT NULL DEFAULT 0,
+  seat_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  available_seats INT NOT NULL DEFAULT 0,
+  booked_seats INT NOT NULL DEFAULT 0,
+  status ENUM('active','inactive','hidden') NOT NULL DEFAULT 'active',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_vendor_buses_vendor (vendor_id), INDEX idx_vendor_buses_status (status)
+);
+
+CREATE TABLE IF NOT EXISTS vendor_trains (
+  id VARCHAR(24) NOT NULL PRIMARY KEY,
+  vendor_id VARCHAR(24) NOT NULL,
+  train_name VARCHAR(255) NOT NULL,
+  train_number VARCHAR(80) NOT NULL,
+  from_station VARCHAR(255) NOT NULL,
+  to_station VARCHAR(255) NOT NULL,
+  departure_date_time DATETIME NOT NULL,
+  arrival_date_time DATETIME NOT NULL,
+  coach_type VARCHAR(100) NOT NULL,
+  total_seats INT NOT NULL DEFAULT 0,
+  seat_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  available_seats INT NOT NULL DEFAULT 0,
+  booked_seats INT NOT NULL DEFAULT 0,
+  status ENUM('active','inactive','hidden') NOT NULL DEFAULT 'active',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_vendor_trains_vendor (vendor_id), INDEX idx_vendor_trains_status (status)
+);
+
+CREATE TABLE IF NOT EXISTS vendor_events (
+  id VARCHAR(24) NOT NULL PRIMARY KEY,
+  vendor_id VARCHAR(24) NOT NULL,
+  event_name VARCHAR(255) NOT NULL,
+  event_type VARCHAR(100) NOT NULL,
+  organizer_name VARCHAR(255) NOT NULL,
+  venue VARCHAR(255) NOT NULL,
+  city VARCHAR(150) NOT NULL,
+  event_date_time DATETIME NOT NULL,
+  ticket_type VARCHAR(100) NOT NULL,
+  ticket_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  total_tickets INT NOT NULL DEFAULT 0,
+  available_tickets INT NOT NULL DEFAULT 0,
+  booked_tickets INT NOT NULL DEFAULT 0,
+  poster_image TEXT NULL,
+  status ENUM('active','inactive','hidden') NOT NULL DEFAULT 'active',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_vendor_events_vendor (vendor_id), INDEX idx_vendor_events_status (status)
+);
+
+CREATE TABLE IF NOT EXISTS vendor_hotels (
+  id VARCHAR(24) NOT NULL PRIMARY KEY,
+  vendor_id VARCHAR(24) NOT NULL,
+  hotel_name VARCHAR(255) NOT NULL,
+  city VARCHAR(150) NOT NULL,
+  address TEXT NOT NULL,
+  room_type VARCHAR(100) NOT NULL,
+  total_rooms INT NOT NULL DEFAULT 0,
+  available_rooms INT NOT NULL DEFAULT 0,
+  booked_rooms INT NOT NULL DEFAULT 0,
+  price_per_night DECIMAL(10,2) NOT NULL DEFAULT 0,
+  check_in_time TIME NOT NULL,
+  check_out_time TIME NOT NULL,
+  amenities TEXT NULL,
+  hotel_image TEXT NULL,
+  status ENUM('active','inactive','hidden') NOT NULL DEFAULT 'active',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_vendor_hotels_vendor (vendor_id), INDEX idx_vendor_hotels_status (status)
+);
