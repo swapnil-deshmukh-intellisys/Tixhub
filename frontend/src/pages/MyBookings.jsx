@@ -1,12 +1,14 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FaTicketAlt } from "react-icons/fa";
 import { QRCodeCanvas } from "qrcode.react";
+import { useNavigate } from "react-router-dom";
 import "./Dashboard.css";
 
 const apiBase = "http://localhost:5000/api";
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token");
 
 function MyBookings() {
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" }), []);
@@ -39,7 +41,7 @@ function MyBookings() {
 
   return (
     <section className="section-block">
-      <div className="section-header"><h3>My Bookings</h3></div>
+      <div className="section-header"><h3>My Bookings</h3><button className="search-submit-btn" onClick={() => navigate("/dashboard/my-hotel-bookings")}>Hotel Bookings</button></div>
       {bookings.map((booking) => (
         <div className="summary-booking-card" key={booking._id}>
           <div className="summary-card-left">

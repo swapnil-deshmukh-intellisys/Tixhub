@@ -10,7 +10,7 @@ const getToken = () =>
 
 const moduleRoutes = {
   flight: "/add-flight",
-  hotel: "/add-hotel",
+  hotel: "/vendor/hotel/add",
   event: "/add-event",
   bus: "/add-bus",
   "travel-package": "/add-travel-package",

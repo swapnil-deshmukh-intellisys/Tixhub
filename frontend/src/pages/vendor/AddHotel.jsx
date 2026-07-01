@@ -1,624 +1,439 @@
-import React, { useMemo, useState } from "react";
-import axios from "axios";
-import { useLocation, useNavigate } from "react-router-dom";
-import "./AddMovie.css";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { filesToImages, hotelRequest } from "../../services/hotelApi";
+import "./HotelVendor.css";
 
-const getToken = () =>
-  localStorage.getItem("token") || sessionStorage.getItem("token");
-
-const languageOptions = ["Hindi", "English", "Marathi", "Tamil", "Telugu", "Malayalam", "Kannada", "Punjabi", "Bengali"];
-const genreOptions = ["Action", "Comedy", "Drama", "Thriller", "Horror", "Romance", "Adventure", "Sci-Fi", "Family", "Animation"];
-const certificateOptions = ["U", "U-A", "A"];
-const movieStatuses = ["draft", "upcoming", "booking_open", "now_showing", "house_full", "ended", "cancelled"];
-const documentTypes = ["Movie Permission Document", "Distributor Agreement", "Theatre Agreement", "Government Certificate", "Other Supporting Documents"];
-
-const steps = [
-  "Basic Info",
-  "Media",
-  "Show Details",
-  "Seat Setup",
-  "Story",
-  "Cast & Crew",
-  "Documents",
-  "Review",
+const hotelAmenities = [
+  "WiFi",
+  "Pool",
+  "Parking",
+  "Restaurant",
+  "Air Conditioning",
+  "Gym",
+  "Spa",
+  "Room Service",
+  "Pet Friendly",
+  "Airport Shuttle",
 ];
 
-const emptyMovie = {
-  title: "",
-  language: "Hindi",
-  duration: "",
-  image: "",
-  posterUrl: "",
-  bannerUrl: "",
-  trailerFileUrl: "",
-  galleryImages: [],
-  documents: [],
+const createEmptyHotel = () => ({
+  name: "",
   description: "",
-  theatre: "",
-  screenName: "",
+  hotelType: "Hotel",
+  starRating: 3,
+  address: "",
   city: "",
-  location: "",
-  showDate: "",
-  showTime: "",
-  endTime: "",
-  totalSeats: 400,
-  regularSeats: 200,
-  primeSeats: 100,
-  vipSeats: 100,
-  bookedSeats: 0,
-  blockedSeats: 0,
-  ticketPrice: 150,
-  regularSeatPrice: 150,
-  primeSeatPrice: 250,
-  vipSeatPrice: 400,
-  genre: "Action",
-  cast: "",
-  director: "",
-  releaseDate: "",
-  hero: "",
-  certificate: "U-A",
-  format: "2D",
-  trailerUrl: "",
-  interestCount: "",
-  aboutMovie: "",
-  status: "draft",
-  isOfferApplicable: false,
-  offers: [],
-  castMembers: [],
-  crewMembers: [],
-};
+  state: "",
+  country: "India",
+  postalCode: "",
+  phone: "",
+  email: "",
+  checkInTime: "14:00",
+  checkOutTime: "11:00",
+  status: "active",
+  amenities: [],
+  images: [],
+  policies: [
+    {
+      type: "cancellation",
+      title: "Cancellation policy",
+      description: "",
+    },
+    { type: "house_rules", title: "House rules", description: "" },
+  ],
+});
 
-const toNumber = (value) => Math.max(Number(value || 0), 0);
+const normalizeHotel = (hotel) => ({
+  ...createEmptyHotel(),
+  ...hotel,
+  hotelType: hotel.hotel_type || hotel.hotelType || "Hotel",
+  starRating: hotel.star_rating ?? hotel.starRating ?? 3,
+  checkInTime: String(hotel.check_in_time || hotel.checkInTime || "14:00").slice(
+    0,
+    5,
+  ),
+  checkOutTime: String(
+    hotel.check_out_time || hotel.checkOutTime || "11:00",
+  ).slice(0, 5),
+  amenities: Array.isArray(hotel.amenities) ? hotel.amenities : [],
+  images: Array.isArray(hotel.images) ? hotel.images : [],
+  policies: Array.isArray(hotel.policies) ? hotel.policies : [],
+});
 
-const generateSeatLayout = (movie) => {
-  const createSeats = (count, prefix, type, price) =>
-    Array.from({ length: toNumber(count) }, (_, index) => ({
-      seatNo: `${prefix}${index + 1}`,
-      type,
-      status: "available",
-      price: toNumber(price),
-    }));
-
-  return {
-    totalSeats: toNumber(movie.totalSeats),
-    regularSeats: toNumber(movie.regularSeats),
-    primeSeats: toNumber(movie.primeSeats),
-    vipSeats: toNumber(movie.vipSeats),
-    bookedSeats: [],
-    blockedSeats: [],
-    seats: [
-      ...createSeats(movie.regularSeats, "A", "regular", movie.regularSeatPrice),
-      ...createSeats(movie.primeSeats, "P", "prime", movie.primeSeatPrice),
-      ...createSeats(movie.vipSeats, "V", "vip", movie.vipSeatPrice),
-    ],
-  };
-};
-
-const readFile = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () =>
-      resolve({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        data: reader.result,
-      });
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
-function AddMovie() {
+export function HotelForm({
+  hotelId = null,
+  embedded = false,
+  onSaved,
+  onCancel,
+}) {
   const navigate = useNavigate();
-  const location = useLocation();
-  const editMovie = location.state?.movie;
+  const [form, setForm] = useState(createEmptyHotel);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(Boolean(hotelId));
+  const [error, setError] = useState("");
 
-  const [activeStep, setActiveStep] = useState(0);
+  useEffect(() => {
+    let active = true;
 
-  const [movie, setMovie] = useState({
-    ...emptyMovie,
-    ...(editMovie || {}),
-    offers: editMovie?.offers?.length ? editMovie.offers : [],
-    castMembers: editMovie?.castMembers?.length ? editMovie.castMembers : [],
-    crewMembers: editMovie?.crewMembers?.length ? editMovie.crewMembers : [],
-  });
-
-  const [uploads, setUploads] = useState({
-    poster: null,
-    banner: null,
-    gallery: [],
-    trailer: null,
-    documents: [],
-  });
-
-  const seatTotal = useMemo(
-    () =>
-      toNumber(movie.regularSeats) +
-      toNumber(movie.primeSeats) +
-      toNumber(movie.vipSeats),
-    [movie.regularSeats, movie.primeSeats, movie.vipSeats]
-  );
-
-  const availableSeats =
-    toNumber(movie.totalSeats) -
-    toNumber(movie.bookedSeats) -
-    toNumber(movie.blockedSeats);
-
-  const seatError = useMemo(() => {
-    if (seatTotal !== toNumber(movie.totalSeats)) {
-      return "Regular + Prime + VIP seats must equal Total Seats.";
+    if (!hotelId) {
+      setForm(createEmptyHotel());
+      setLoading(false);
+      setError("");
+      return () => {
+        active = false;
+      };
     }
 
-    if (toNumber(movie.bookedSeats) > toNumber(movie.totalSeats)) {
-      return "Booked Seats cannot be greater than Total Seats.";
-    }
+    setLoading(true);
+    setError("");
+    hotelRequest(`/vendor/hotels/${hotelId}`)
+      .then((hotel) => {
+        if (active) setForm(normalizeHotel(hotel));
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
 
-    if (toNumber(movie.blockedSeats) > toNumber(movie.totalSeats)) {
-      return "Blocked Seats cannot be greater than Total Seats.";
-    }
-
-    return "";
-  }, [seatTotal, movie]);
-
-  const updateField = (field, value) => {
-    setMovie((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  };
-
-  const addListItem = (field, item) => {
-    setMovie((current) => ({
-      ...current,
-      [field]: [...(current[field] || []), item],
-    }));
-  };
-
-  const updateListItem = (field, index, key, value) => {
-    setMovie((current) => ({
-      ...current,
-      [field]: current[field].map((item, itemIndex) =>
-        itemIndex === index ? { ...item, [key]: value } : item
-      ),
-    }));
-  };
-
-  const removeListItem = (field, index) => {
-    setMovie((current) => ({
-      ...current,
-      [field]: current[field].filter((_, itemIndex) => itemIndex !== index),
-    }));
-  };
-
-  const nextStep = () => {
-    if (activeStep === 3 && seatError) {
-      alert(seatError);
-      return;
-    }
-
-    setActiveStep((current) => Math.min(current + 1, steps.length - 1));
-  };
-
-  const prevStep = () => {
-    setActiveStep((current) => Math.max(current - 1, 0));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (seatError) {
-      alert(seatError);
-      setActiveStep(3);
-      return;
-    }
-
-    const config = {
-      headers: {
-        Authorization: `Bearer ${getToken()}`,
-        "Content-Type": "application/json",
-      },
+    return () => {
+      active = false;
     };
+  }, [hotelId]);
+
+  const update = (key, value) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const toggleAmenity = (amenity) => {
+    update(
+      "amenities",
+      form.amenities.includes(amenity)
+        ? form.amenities.filter((item) => item !== amenity)
+        : [...form.amenities, amenity],
+    );
+  };
+
+  const uploadImages = async (event) => {
+    const images = await filesToImages(event.target.files);
+    update("images", [...form.images, ...images]);
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
 
     try {
-      const uploadPayload = {
-        poster: uploads.poster ? await readFile(uploads.poster) : null,
-        banner: uploads.banner ? await readFile(uploads.banner) : null,
-        gallery: await Promise.all((uploads.gallery || []).map(readFile)),
-        trailer: uploads.trailer ? await readFile(uploads.trailer) : null,
-        documents: await Promise.all(
-          (uploads.documents || [])
-            .filter((item) => item.file)
-            .map(async (item) => ({
-              documentType: item.documentType,
-              file: await readFile(item.file),
-            }))
-        ),
-      };
+      await hotelRequest(
+        hotelId ? `/vendor/hotels/${hotelId}` : "/vendor/hotels",
+        {
+          method: hotelId ? "PUT" : "POST",
+          body: JSON.stringify(form),
+        },
+      );
 
-      const payload = {
-        ...movie,
-        ticketPrice: movie.regularSeatPrice || movie.ticketPrice,
-        uploads: uploadPayload,
-        seatLayout: generateSeatLayout(movie),
-      };
-
-      if (editMovie) {
-        await axios.put(
-          `http://localhost:5000/api/vendor/movies/${editMovie._id}`,
-          payload,
-          config
-        );
-        alert("Movie updated");
-      } else {
-        await axios.post("http://localhost:5000/api/vendor/movies", payload, config);
-        alert("Movie added");
-      }
-
-      navigate("/vendor/movies");
-    } catch (error) {
-      alert(error.response?.data?.message || "Unable to save movie");
+      if (onSaved) onSaved();
+      else navigate("/vendor/hotels");
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  return (
-    <div className="add-movie-page">
-      <div className="add-movie-container">
-        <div className="add-movie-top">
-          <h1>{editMovie ? "Edit Movie" : "Add New Movie"}</h1>
-          <p>Complete movie setup in simple professional steps.</p>
-        </div>
-
-        <div className="add-movie-stepper">
-          {steps.map((step, index) => (
-            <div
-              className={`stepper-item ${
-                activeStep === index ? "active" : ""
-              } ${activeStep > index ? "completed" : ""}`}
-              key={step}
-            >
-              <div className="stepper-circle">{index + 1}</div>
-              <p>{step}</p>
-              {index !== steps.length - 1 && <div className="stepper-line" />}
-            </div>
-          ))}
-        </div>
-
-        <div className="add-movie-card">
-          <form className="add-movie-form" onSubmit={handleSubmit}>
-            {activeStep === 0 && (
-              <StepCard title="Basic Info">
-                <div className="form-grid">
-                  <Field label="Movie Name" value={movie.title} onChange={(value) => updateField("title", value)} required />
-                  <SelectField label="Language" value={movie.language} options={languageOptions} onChange={(value) => updateField("language", value)} required />
-                  <Field label="Duration" value={movie.duration} onChange={(value) => updateField("duration", value)} placeholder="2h 46m" required />
-                  <SelectField label="Genre" value={movie.genre} options={genreOptions} onChange={(value) => updateField("genre", value)} required />
-                  <SelectField label="Certificate" value={movie.certificate} options={certificateOptions} onChange={(value) => updateField("certificate", value)} />
-                  <Field label="Format" value={movie.format} onChange={(value) => updateField("format", value)} placeholder="2D" />
-                  <Field label="Release Date" type="date" value={movie.releaseDate} onChange={(value) => updateField("releaseDate", value)} required />
-                  <SelectField label="Movie Status" value={movie.status} options={movieStatuses} onChange={(value) => updateField("status", value)} />
-                </div>
-              </StepCard>
-            )}
-
-            {activeStep === 1 && (
-              <StepCard title="Media">
-                <div className="file-grid">
-                  <FileField label="Movie Poster Upload" accept="image/*" onChange={(file) => setUploads((current) => ({ ...current, poster: file }))} />
-                  <FileField label="Movie Banner Upload" accept="image/*" onChange={(file) => setUploads((current) => ({ ...current, banner: file }))} />
-                  <FileField label="Movie Gallery Images Upload" accept="image/*" multiple onChange={(files) => setUploads((current) => ({ ...current, gallery: files }))} />
-                  <FileField label="Trailer Upload" accept="video/*" onChange={(file) => setUploads((current) => ({ ...current, trailer: file }))} />
-                </div>
-
-                <Field label="Poster URL Fallback" value={movie.image} onChange={(value) => updateField("image", value)} />
-                <Field label="Banner URL Fallback" value={movie.bannerUrl} onChange={(value) => updateField("bannerUrl", value)} />
-                <Field label="Trailer URL Optional" value={movie.trailerUrl} onChange={(value) => updateField("trailerUrl", value)} />
-
-                {(movie.image || movie.posterUrl) && (
-                  <div className="poster-preview">
-                    <img src={movie.posterUrl || movie.image} alt="Poster" />
-                  </div>
-                )}
-              </StepCard>
-            )}
-
-            {activeStep === 2 && (
-              <StepCard title="Show Details">
-                <div className="form-grid">
-                  <Field label="Theatre Name" value={movie.theatre} onChange={(value) => updateField("theatre", value)} required />
-                  <Field label="Screen Name" value={movie.screenName} onChange={(value) => updateField("screenName", value)} required />
-                  <Field label="City" value={movie.city} onChange={(value) => updateField("city", value)} required />
-                  <Field label="Location" value={movie.location} onChange={(value) => updateField("location", value)} />
-                  <Field label="Show Date" type="date" value={movie.showDate} onChange={(value) => updateField("showDate", value)} />
-                  <Field label="Show Time" type="time" value={movie.showTime} onChange={(value) => updateField("showTime", value)} />
-                  <Field label="End Time" type="time" value={movie.endTime} onChange={(value) => updateField("endTime", value)} />
-                  <Field label="Interested Count" value={movie.interestCount} onChange={(value) => updateField("interestCount", value)} placeholder="11.3K+ are interested" />
-                </div>
-              </StepCard>
-            )}
-
-            {activeStep === 3 && (
-              <StepCard title="Seat Setup">
-                <p className="seat-setup-help">
-                  Enter only seat counts. System will automatically generate Regular, Prime and VIP seats.
-                </p>
-
-                <div className="seat-setup-grid">
-                  <Field label="Total Seats" type="number" value={movie.totalSeats} onChange={(value) => updateField("totalSeats", value)} required />
-
-                  <div className="seat-pair">
-                    <Field label="Regular Seats" type="number" value={movie.regularSeats} onChange={(value) => updateField("regularSeats", value)} required />
-                    <Field label="Regular Price" type="number" value={movie.regularSeatPrice} onChange={(value) => updateField("regularSeatPrice", value)} required />
-                  </div>
-
-                  <div className="seat-pair">
-                    <Field label="Prime Seats" type="number" value={movie.primeSeats} onChange={(value) => updateField("primeSeats", value)} required />
-                    <Field label="Prime Price" type="number" value={movie.primeSeatPrice} onChange={(value) => updateField("primeSeatPrice", value)} required />
-                  </div>
-
-                  <div className="seat-pair">
-                    <Field label="VIP Seats" type="number" value={movie.vipSeats} onChange={(value) => updateField("vipSeats", value)} required />
-                    <Field label="VIP Price" type="number" value={movie.vipSeatPrice} onChange={(value) => updateField("vipSeatPrice", value)} required />
-                  </div>
-
-                  <div className="seat-pair">
-                    <Field label="Booked Seats" type="number" value={movie.bookedSeats} onChange={(value) => updateField("bookedSeats", value)} />
-                    <Field label="Blocked Seats" type="number" value={movie.blockedSeats} onChange={(value) => updateField("blockedSeats", value)} />
-                  </div>
-
-                  {seatError && <p className="seat-error">{seatError}</p>}
-
-                  <div className="seat-summary">
-                    <span>Total <b>{toNumber(movie.totalSeats)}</b></span>
-                    <span>Regular <b>{toNumber(movie.regularSeats)}</b></span>
-                    <span>Prime <b>{toNumber(movie.primeSeats)}</b></span>
-                    <span>VIP <b>{toNumber(movie.vipSeats)}</b></span>
-                    <span>Available <b>{Math.max(availableSeats, 0)}</b></span>
-                  </div>
-
-                  <SeatPreview movie={movie} />
-                </div>
-              </StepCard>
-            )}
-
-            {activeStep === 4 && (
-              <StepCard title="Story">
-                <TextArea label="Short Description" value={movie.description} onChange={(value) => updateField("description", value)} />
-                <TextArea label="About Movie" value={movie.aboutMovie} onChange={(value) => updateField("aboutMovie", value)} />
-                <div className="form-grid">
-                  <Field label="Hero / Lead" value={movie.hero} onChange={(value) => updateField("hero", value)} />
-                  <Field label="Legacy Cast Text" value={movie.cast} onChange={(value) => updateField("cast", value)} />
-                  <Field label="Director" value={movie.director} onChange={(value) => updateField("director", value)} />
-                </div>
-              </StepCard>
-            )}
-
-            {activeStep === 5 && (
-              <>
-                <PeopleEditor
-                  title="Cast with Photos"
-                  addLabel="Add Cast"
-                  items={movie.castMembers}
-                  onAdd={() => addListItem("castMembers", { name: "", role: "Actor", photo: "" })}
-                  onUpdate={(index, key, value) => updateListItem("castMembers", index, key, value)}
-                  onRemove={(index) => removeListItem("castMembers", index)}
-                />
-
-                <PeopleEditor
-                  title="Crew"
-                  addLabel="Add Crew"
-                  items={movie.crewMembers}
-                  onAdd={() => addListItem("crewMembers", { name: "", role: "Director", photo: "" })}
-                  onUpdate={(index, key, value) => updateListItem("crewMembers", index, key, value)}
-                  onRemove={(index) => removeListItem("crewMembers", index)}
-                />
-              </>
-            )}
-
-            {activeStep === 6 && (
-              <>
-                <DocumentEditor documents={uploads.documents} onChange={(documents) => setUploads((current) => ({ ...current, documents }))} />
-
-                <div className="section-editor">
-                  <div className="section-editor-top">
-                    <div>
-                      <h2>Offers</h2>
-                      <label className="offer-toggle">
-                        <input
-                          type="checkbox"
-                          checked={movie.isOfferApplicable}
-                          onChange={(e) => updateField("isOfferApplicable", e.target.checked)}
-                        />
-                        Offer is applicable
-                      </label>
-                    </div>
-                    <button type="button" onClick={() => addListItem("offers", { title: "", description: "" })}>
-                      Add Offer
-                    </button>
-                  </div>
-
-                  {(movie.offers || []).map((offer, index) => (
-                    <div className="repeat-row offer-row" key={`offer-${index}`}>
-                      <input type="text" placeholder="Offer title" value={offer.title} onChange={(e) => updateListItem("offers", index, "title", e.target.value)} />
-                      <input type="text" placeholder="Offer description" value={offer.description} onChange={(e) => updateListItem("offers", index, "description", e.target.value)} />
-                      <button type="button" onClick={() => removeListItem("offers", index)}>Remove</button>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {activeStep === 7 && (
-              <StepCard title="Review Movie Setup">
-                <div className="seat-summary review-summary">
-                  <span>Movie <b>{movie.title || "-"}</b></span>
-                  <span>Theatre <b>{movie.theatre || "-"}</b></span>
-                  <span>Total Seats <b>{toNumber(movie.totalSeats)}</b></span>
-                  <span>Regular <b>{toNumber(movie.regularSeats)}</b></span>
-                  <span>Prime <b>{toNumber(movie.primeSeats)}</b></span>
-                  <span>VIP <b>{toNumber(movie.vipSeats)}</b></span>
-                  <span>City <b>{movie.city || "-"}</b></span>
-                  <span>Status <b>{movie.status}</b></span>
-                </div>
-              </StepCard>
-            )}
-
-            <div className="step-actions">
-              {activeStep > 0 && (
-                <button type="button" className="step-btn secondary" onClick={prevStep}>
-                  Back
-                </button>
-              )}
-
-              {activeStep < steps.length - 1 ? (
-                <button type="button" className="step-btn primary" onClick={nextStep}>
-                  Next
-                </button>
-              ) : (
-                <button type="submit" className="add-movie-btn">
-                  {editMovie ? "Update Movie" : "Add Movie"}
-                </button>
-              )}
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StepCard({ title, children }) {
-  return (
-    <div className="section-editor">
-      <div className="section-editor-top">
-        <h2>{title}</h2>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function SelectField({ label, value, options, onChange, required = false }) {
-  return (
-    <div className="form-group">
-      <label>{label}</label>
-      <select value={value || ""} required={required} onChange={(e) => onChange(e.target.value)}>
-        {options.map((option) => (
-          <option key={option} value={option}>{option.replace(/_/g, " ")}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function Field({ label, value, onChange, type = "text", placeholder = "", required = false }) {
-  return (
-    <div className="form-group">
-      <label>{label}</label>
-      <input type={type} value={value || ""} placeholder={placeholder} required={required} onChange={(e) => onChange(e.target.value)} />
-    </div>
-  );
-}
-
-function TextArea({ label, value, onChange }) {
-  return (
-    <div className="form-group">
-      <label>{label}</label>
-      <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} />
-    </div>
-  );
-}
-
-function FileField({ label, accept, multiple = false, onChange }) {
-  return (
-    <div className="form-group file-field">
-      <label>{label}</label>
-      <input type="file" accept={accept} multiple={multiple} onChange={(e) => onChange(multiple ? Array.from(e.target.files || []) : e.target.files?.[0] || null)} />
-    </div>
-  );
-}
-
-function SeatPreview({ movie }) {
-  const sections = [
-    { title: "Regular Seats", type: "regular", prefix: "A", count: movie.regularSeats, price: movie.regularSeatPrice },
-    { title: "Prime Seats", type: "prime", prefix: "P", count: movie.primeSeats, price: movie.primeSeatPrice },
-    { title: "VIP Seats", type: "vip", prefix: "V", count: movie.vipSeats, price: movie.vipSeatPrice },
-  ];
-
-  return (
-    <div className="bms-seat-layout">
-      <div className="bms-screen">SCREEN</div>
-
-      {sections.map((section) => {
-        const seats = Array.from({ length: Math.min(toNumber(section.count), 40) }, (_, index) => `${section.prefix}${index + 1}`);
-
-        return (
-          <section className="bms-seat-section" key={section.type}>
-            <div className="bms-section-title">
-              <strong>{section.title}</strong>
-              <span>Rs {section.price || 0}</span>
-            </div>
-
-            <div className="bms-seat-numbers">
-              {seats.map((seat) => (
-                <span className={section.type} key={seat}>{seat}</span>
-              ))}
-            </div>
-
-            {toNumber(section.count) > 40 && (
-              <p className="seat-preview-more">+ {toNumber(section.count) - 40} more seats generated automatically</p>
-            )}
-          </section>
-        );
-      })}
-    </div>
-  );
-}
-
-function DocumentEditor({ documents, onChange }) {
-  const addDocument = () => onChange([...documents, { documentType: documentTypes[0], file: null }]);
-
-  const updateDocument = (index, patch) => {
-    onChange(documents.map((document, documentIndex) => documentIndex === index ? { ...document, ...patch } : document));
+  const cancel = () => {
+    if (onCancel) onCancel();
+    else navigate("/vendor/hotels");
   };
 
+  if (loading) return <div className="hv-loading">Loading hotel...</div>;
+
   return (
-    <div className="section-editor">
-      <div className="section-editor-top">
-        <h2>Document Upload Section</h2>
-        <button type="button" onClick={addDocument}>Add Document</button>
+    <div className={embedded ? "" : "hv-page"}>
+      <div className="hv-toolbar">
+        <div>
+          <h1>{hotelId ? "Edit hotel" : "Add hotel"}</h1>
+          <p>Property details, media, amenities, and guest policies.</p>
+        </div>
+        {!embedded && (
+          <button className="hv-btn ghost" type="button" onClick={cancel}>
+            Back
+          </button>
+        )}
       </div>
 
-      {documents.map((document, index) => (
-        <div className="repeat-row document-row" key={`document-${index}`}>
-          <select value={document.documentType} onChange={(e) => updateDocument(index, { documentType: e.target.value })}>
-            {documentTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-          </select>
-          <input accept=".pdf,.jpg,.jpeg,.png,.docx" type="file" onChange={(e) => updateDocument(index, { file: e.target.files?.[0] || null })} />
-          <button type="button" onClick={() => onChange(documents.filter((_, documentIndex) => documentIndex !== index))}>Remove</button>
+      {error && <div className="hv-error">{error}</div>}
+
+      <form className="hv-form" onSubmit={submit}>
+        <section className="hv-panel">
+          <h2>Property information</h2>
+          <div className="hv-grid three">
+            <HotelField
+              label="Hotel name"
+              value={form.name}
+              onChange={(value) => update("name", value)}
+              required
+            />
+            <HotelSelect
+              label="Type"
+              value={form.hotelType}
+              onChange={(value) => update("hotelType", value)}
+              options={["Hotel", "Resort", "Villa", "Hostel", "Apartment"]}
+            />
+            <HotelField
+              label="Star rating"
+              type="number"
+              min="0"
+              max="5"
+              step="0.5"
+              value={form.starRating}
+              onChange={(value) => update("starRating", value)}
+            />
+            <HotelField
+              label="Description"
+              className="hv-wide"
+              textarea
+              value={form.description}
+              onChange={(value) => update("description", value)}
+            />
+          </div>
+        </section>
+
+        <section className="hv-panel">
+          <h2>Location and contact</h2>
+          <div className="hv-grid three">
+            <HotelField
+              label="Address"
+              className="hv-wide"
+              value={form.address}
+              onChange={(value) => update("address", value)}
+              required
+            />
+            <HotelField
+              label="City"
+              value={form.city}
+              onChange={(value) => update("city", value)}
+              required
+            />
+            <HotelField
+              label="State"
+              value={form.state}
+              onChange={(value) => update("state", value)}
+            />
+            <HotelField
+              label="Postal code"
+              value={form.postalCode}
+              onChange={(value) => update("postalCode", value)}
+            />
+            <HotelField
+              label="Country"
+              value={form.country}
+              onChange={(value) => update("country", value)}
+            />
+            <HotelField
+              label="Phone"
+              value={form.phone}
+              onChange={(value) => update("phone", value)}
+            />
+            <HotelField
+              label="Email"
+              type="email"
+              value={form.email}
+              onChange={(value) => update("email", value)}
+            />
+            <HotelField
+              label="Check-in time"
+              type="time"
+              value={form.checkInTime}
+              onChange={(value) => update("checkInTime", value)}
+            />
+            <HotelField
+              label="Check-out time"
+              type="time"
+              value={form.checkOutTime}
+              onChange={(value) => update("checkOutTime", value)}
+            />
+            <HotelSelect
+              label="Status"
+              value={form.status}
+              onChange={(value) => update("status", value)}
+              options={["active", "inactive", "hidden"]}
+            />
+          </div>
+        </section>
+
+        <section className="hv-panel">
+          <h2>Amenities and images</h2>
+          <div className="hv-chips">
+            {hotelAmenities.map((amenity) => (
+              <label className="hv-chip" key={amenity}>
+                <input
+                  type="checkbox"
+                  checked={form.amenities.includes(amenity)}
+                  onChange={() => toggleAmenity(amenity)}
+                />{" "}
+                {amenity}
+              </label>
+            ))}
+          </div>
+
+          <br />
+          <label className="hv-field">
+            <span>Hotel images</span>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={uploadImages}
+            />
+          </label>
+
+          {form.images.length > 0 && (
+            <div className="hv-image-preview">
+              {form.images.map((image, index) => (
+                <div key={`${image.url}-${index}`}>
+                  <img src={image.url} alt="Hotel preview" />
+                  <button
+                    type="button"
+                    className="hv-btn danger"
+                    onClick={() =>
+                      update(
+                        "images",
+                        form.images.filter(
+                          (_, imageIndex) => imageIndex !== index,
+                        ),
+                      )
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="hv-panel">
+          <h2>Policies</h2>
+          {form.policies.map((policy, index) => (
+            <div className="hv-grid" key={`${policy.type}-${index}`}>
+              <HotelField
+                label="Policy title"
+                value={policy.title}
+                onChange={(value) =>
+                  update(
+                    "policies",
+                    form.policies.map((item, policyIndex) =>
+                      policyIndex === index
+                        ? { ...item, title: value }
+                        : item,
+                    ),
+                  )
+                }
+              />
+              <HotelSelect
+                label="Policy type"
+                value={policy.type}
+                onChange={(value) =>
+                  update(
+                    "policies",
+                    form.policies.map((item, policyIndex) =>
+                      policyIndex === index ? { ...item, type: value } : item,
+                    ),
+                  )
+                }
+                options={[
+                  "cancellation",
+                  "house_rules",
+                  "children",
+                  "pets",
+                  "payment",
+                ]}
+              />
+              <HotelField
+                className="hv-wide"
+                textarea
+                label="Policy details"
+                value={policy.description}
+                onChange={(value) =>
+                  update(
+                    "policies",
+                    form.policies.map((item, policyIndex) =>
+                      policyIndex === index
+                        ? { ...item, description: value }
+                        : item,
+                    ),
+                  )
+                }
+              />
+            </div>
+          ))}
+
+          <button
+            type="button"
+            className="hv-btn secondary"
+            onClick={() =>
+              update("policies", [
+                ...form.policies,
+                { type: "general", title: "", description: "" },
+              ])
+            }
+          >
+            Add policy
+          </button>
+        </section>
+
+        <div className="hv-actions">
+          <button className="hv-btn" disabled={saving}>
+            {saving
+              ? "Saving..."
+              : hotelId
+                ? "Update hotel"
+                : "Create hotel"}
+          </button>
+          <button className="hv-btn ghost" type="button" onClick={cancel}>
+            Cancel
+          </button>
         </div>
-      ))}
+      </form>
     </div>
   );
 }
 
-function PeopleEditor({ title, addLabel, items, onAdd, onUpdate, onRemove }) {
-  return (
-    <div className="section-editor">
-      <div className="section-editor-top">
-        <h2>{title}</h2>
-        <button type="button" onClick={onAdd}>{addLabel}</button>
-      </div>
+export default function AddHotel() {
+  return <HotelForm />;
+}
 
-      {(items || []).map((member, index) => (
-        <div className="repeat-row" key={`${title}-${index}`}>
-          <input type="text" placeholder="Name" value={member.name || ""} onChange={(e) => onUpdate(index, "name", e.target.value)} />
-          <input type="text" placeholder="Role" value={member.role || ""} onChange={(e) => onUpdate(index, "role", e.target.value)} />
-          <input type="text" placeholder="Photo URL" value={member.photo || ""} onChange={(e) => onUpdate(index, "photo", e.target.value)} />
-          <button type="button" onClick={() => onRemove(index)}>Remove</button>
-        </div>
-      ))}
-    </div>
+function HotelField({
+  label,
+  onChange,
+  textarea,
+  className = "",
+  ...props
+}) {
+  return (
+    <label className={`hv-field ${className}`}>
+      <span>{label}</span>
+      {textarea ? (
+        <textarea {...props} onChange={(event) => onChange(event.target.value)} />
+      ) : (
+        <input {...props} onChange={(event) => onChange(event.target.value)} />
+      )}
+    </label>
   );
 }
 
-export default AddMovie;
+function HotelSelect({ label, value, onChange, options }) {
+  return (
+    <label className="hv-field">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <option key={option}>{option}</option>
+        ))}
+      </select>
+    </label>
+  );
+}

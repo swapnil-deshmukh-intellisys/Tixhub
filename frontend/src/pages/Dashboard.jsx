@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaBus,
@@ -24,7 +24,7 @@ const categories = [
   { name: "Movies", path: "/dashboard/movies", icon: <FaFilm />, style: "movies" },
   { name: "Flights", path: "/dashboard/flights", icon: <FaPlane />, style: "flights" },
   { name: "Events", path: "/dashboard/event", icon: <FaCalendarAlt />, style: "events" },
-  { name: "Hotels", path: "/dashboard/hotel", icon: <FaHotel />, style: "hotels" },
+  { name: "Hotels", path: "/dashboard/hotels", icon: <FaHotel />, style: "hotels" },
   { name: "Buses", path: "/dashboard/bus", icon: <FaBus />, style: "buses" },
   { name: "Trains", path: "/dashboard/train", icon: <FaTrain />, style: "trains" },
   { name: "Holidays", path: "/dashboard/holiday", icon: <FaSuitcaseRolling />, style: "travel" },
@@ -86,6 +86,8 @@ function Dashboard() {
       navigate("/dashboard/movies");
     } else if (value.includes("flight")) {
       navigate("/dashboard/flights");
+    } else if (value.includes("hotel")) {
+      navigate("/dashboard/hotels");
     } else if (value) {
       navigate(`/dashboard/browse?search=${encodeURIComponent(searchText)}`);
     } else {

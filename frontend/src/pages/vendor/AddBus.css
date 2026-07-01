@@ -1,1 +1,196 @@
-@import "./AddFlight.css";
+.add-bus-page {
+  min-height: 100vh;
+  padding: 40px 20px;
+  background: linear-gradient(135deg, #e0f2fe, #ffffff);
+  display: flex;
+  justify-content: center;
+}
+
+.add-bus-container {
+  width: 100%;
+  max-width: 950px;
+}
+
+.add-bus-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.add-bus-header h1 {
+  font-size: 46px;
+  margin: 0 0 10px;
+  color: #0f172a;
+}
+
+.add-bus-header p {
+  font-size: 18px;
+  color: #475569;
+}
+
+.bus-stepper {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.bus-step {
+  flex: 1;
+  text-align: center;
+  color: #64748b;
+}
+
+.bus-step span {
+  width: 38px;
+  height: 38px;
+  margin: 0 auto 8px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+.bus-step.active span {
+  background: #22c55e;
+  color: white;
+}
+
+.bus-step.active p {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.bus-step p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.add-bus-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 30px;
+  padding: 40px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.14);
+}
+
+.bus-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 22px;
+}
+
+.bus-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bus-form-group.full {
+  grid-column: 1 / -1;
+}
+
+.bus-form-group label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.bus-form-group input {
+  width: 100%;
+  border: 2px solid transparent;
+  outline: none;
+  background: #f1f5f9;
+  border-radius: 18px;
+  padding: 16px 18px;
+  font-size: 16px;
+  color: #0f172a;
+}
+
+.bus-form-group input:focus {
+  border-color: #22c55e;
+  background: white;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+}
+
+.bus-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-top: 32px;
+}
+
+.bus-back-btn,
+.bus-next-btn,
+.bus-submit-btn {
+  border: none;
+  border-radius: 14px;
+  padding: 13px 30px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.bus-back-btn {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.bus-next-btn,
+.bus-submit-btn {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+}
+
+.bus-submit-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.bus-review {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+}
+
+.bus-review-item {
+  background: #f8fafc;
+  border-radius: 18px;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+}
+
+.bus-review-item span {
+  display: block;
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.bus-review-item strong {
+  color: #0f172a;
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .add-bus-card {
+    padding: 24px;
+  }
+
+  .bus-stepper {
+    overflow-x: auto;
+  }
+
+  .bus-step {
+    min-width: 110px;
+  }
+
+  .bus-form-grid,
+  .bus-review {
+    grid-template-columns: 1fr;
+  }
+
+  .add-bus-header h1 {
+    font-size: 36px;
+  }
+}

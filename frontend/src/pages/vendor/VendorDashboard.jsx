@@ -213,6 +213,8 @@ function VendorDashboard() {
     ? "all"
     : serviceModules.includes(activeRoute)
     ? activeRoute
+    : activeRoute.startsWith("hotel")
+      ? "hotels"
     : activeRoute.startsWith("flight") || ["add-flight", "my-flights"].includes(activeRoute)
       ? "flights"
       : "movies";
@@ -374,11 +376,11 @@ function VendorDashboard() {
     if (activeRoute === "notification-center") return <NotificationCenterPage notifications={notifications} reload={loadDashboard} />;
     if (activeRoute === "movie-status") return <MovieStatusPage movies={movies} reload={loadDashboard} />;
     if (["flights", "add-flight", "my-flights", "flight-seat-management", "flight-bookings", "passengers", "flight-revenue", "flight-reports"].includes(activeRoute) || activeRoute.startsWith("edit-flight")) return <FlightModule page={activeRoute === "flights" ? "dashboard" : activeRoute} navigate={navigate} />;
-    const serviceListMatch = activeRoute.match(/^(buses|trains|events|hotels)(?:\/([^/]+))?$/);
+    const serviceListMatch = activeRoute.match(/^(buses|trains|events)(?:\/([^/]+))?$/);
     if (serviceListMatch) return <VendorServiceModule service={serviceListMatch[1]} mode={serviceListMatch[2] ? "details" : "list"} id={serviceListMatch[2]} navigate={navigate} />;
-    const serviceFormMatch = activeRoute.match(/^(add|edit)-(bus|train|event|hotel)(?:\/([^/]+))?$/);
+    const serviceFormMatch = activeRoute.match(/^(add|edit)-(bus|train|event)(?:\/([^/]+))?$/);
     if (serviceFormMatch) {
-      const service = { bus: "buses", train: "trains", event: "events", hotel: "hotels" }[serviceFormMatch[2]];
+      const service = { bus: "buses", train: "trains", event: "events" }[serviceFormMatch[2]];
       return <VendorServiceModule service={service} mode={serviceFormMatch[1]} id={serviceFormMatch[3]} navigate={navigate} />;
     }
     if (["bus", "buses"].includes(activeRoute)) return <BusVendorDashboard />;

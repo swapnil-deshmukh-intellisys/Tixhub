@@ -400,6 +400,40 @@ const ensureMovieSeatsSchema = async (connection) => {
   await ensureColumn(connection, "movie_seats", columnMap, "blocked_seat_type", "VARCHAR(40) NULL");
 };
 
+const ensureHotelSchema = async (connection) => {
+  const [hotelColumns] = await connection.query("SHOW COLUMNS FROM hotels");
+  const hotels = new Map(hotelColumns.map((column) => [column.Field, column]));
+  const hotelAdditions = [
+    ["name", "VARCHAR(255) NULL"], ["slug", "VARCHAR(280) NULL"], ["description", "TEXT NULL"],
+    ["hotel_type", "VARCHAR(80) NOT NULL DEFAULT 'Hotel'"], ["star_rating", "DECIMAL(2,1) NOT NULL DEFAULT 0"],
+    ["review_rating", "DECIMAL(3,2) NOT NULL DEFAULT 0"], ["review_count", "INT NOT NULL DEFAULT 0"],
+    ["address", "TEXT NULL"], ["state", "VARCHAR(150) NULL"], ["country", "VARCHAR(100) NOT NULL DEFAULT 'India'"],
+    ["postal_code", "VARCHAR(20) NULL"], ["latitude", "DECIMAL(10,7) NULL"], ["longitude", "DECIMAL(10,7) NULL"],
+    ["phone", "VARCHAR(40) NULL"], ["email", "VARCHAR(190) NULL"],
+    ["check_in_time", "TIME NOT NULL DEFAULT '14:00:00'"], ["check_out_time", "TIME NOT NULL DEFAULT '11:00:00'"],
+    ["amenities", "JSON NULL"],
+  ];
+  for (const [name, definition] of hotelAdditions) await ensureColumn(connection, "hotels", hotels, name, definition);
+  if (hotels.has("hotel_name")) {
+    await connection.query("UPDATE hotels SET name=COALESCE(NULLIF(name,''),hotel_name), slug=COALESCE(NULLIF(slug,''),LOWER(REPLACE(hotel_name,' ','-'))) WHERE name IS NULL OR name='' OR slug IS NULL OR slug=''");
+  }
+
+  const [bookingColumns] = await connection.query("SHOW COLUMNS FROM hotel_bookings");
+  const bookings = new Map(bookingColumns.map((column) => [column.Field, column]));
+  const bookingAdditions = [
+    ["qr_token", "VARCHAR(190) NULL"], ["room_id", "VARCHAR(24) NULL"], ["check_in_date", "DATE NULL"],
+    ["check_out_date", "DATE NULL"], ["room_count", "INT NOT NULL DEFAULT 1"], ["adult_count", "INT NOT NULL DEFAULT 1"],
+    ["child_count", "INT NOT NULL DEFAULT 0"], ["guest_name", "VARCHAR(180) NULL"], ["guest_email", "VARCHAR(190) NULL"],
+    ["guest_phone", "VARCHAR(40) NULL"], ["special_requests", "TEXT NULL"], ["subtotal", "DECIMAL(12,2) NOT NULL DEFAULT 0"],
+    ["tax_amount", "DECIMAL(12,2) NOT NULL DEFAULT 0"], ["discount_amount", "DECIMAL(12,2) NOT NULL DEFAULT 0"],
+    ["coupon_code", "VARCHAR(80) NULL"], ["payment_id", "VARCHAR(190) NULL"], ["cancellation_reason", "TEXT NULL"],
+    ["cancelled_at", "DATETIME NULL"], ["checked_in_at", "DATETIME NULL"],
+  ];
+  for (const [name, definition] of bookingAdditions) await ensureColumn(connection, "hotel_bookings", bookings, name, definition);
+  await connection.query("ALTER TABLE hotel_bookings MODIFY booking_status ENUM('pending','confirmed','cancel_requested','cancelled','checked_in','checked_out','completed','refunded') NOT NULL DEFAULT 'confirmed'");
+  await connection.query("ALTER TABLE hotel_bookings MODIFY payment_status ENUM('pending','success','paid','failed','refunded') NOT NULL DEFAULT 'pending'");
+};
+
 const ensureSeatsSchema = async (connection) => {
   await connection.query(`
     CREATE TABLE IF NOT EXISTS seats (
@@ -696,6 +730,8 @@ const ready = (async () => {
     await ensureMovieProductionSchema(connection);
     await runSqlFile(connection, path.join(__dirname, "..", "..", "migrations", "2026-06-18-vendor-production-modules.sql"));
     await runSqlFile(connection, path.join(__dirname, "..", "..", "migrations", "2026-06-30-vendor-service-modules.sql"));
+    await runSqlFile(connection, path.join(__dirname, "..", "..", "migrations", "2026-07-01-hotel-module.sql"));
+    await ensureHotelSchema(connection);
     await migrateMovieRecords(connection);
     console.log("MySQL Connected");
     return true;

@@ -21,6 +21,13 @@ import MyBookings from "./pages/MyBookings";
 import TixWallet from "./pages/TixWallet";
 import Profile from "./pages/Profile";
 import CatalogContent from "./pages/CatalogContent";
+import HotelList from "./pages/HotelList";
+import HotelDetails from "./pages/HotelDetails";
+import HotelRoomSelection from "./pages/HotelRoomSelection";
+import HotelGuestDetails from "./pages/HotelGuestDetails";
+import HotelPayment from "./pages/HotelPayment";
+import HotelBookingConfirmation from "./pages/HotelBookingConfirmation";
+import MyHotelBookings from "./pages/MyHotelBookings";
 
 import UpcomingMovies from "./components/UpcomingMovies";
 import MovieContent from "./components/MovieContent";
@@ -28,9 +35,10 @@ import FlightContent from "./components/FlightContent";
 
 import VendorDashboard from "./pages/vendor/VendorDashboard";
 import MovieVendorDashboard from "./pages/vendor/MovieVendorDashboard";
+import HotelVendorDashboard from "./pages/vendor/HotelVendorDashboard";
+import AddHotel from "./pages/vendor/AddHotel";
 import AddMovie from "./pages/vendor/AddMovie";
 import AddFlight from "./pages/vendor/AddFlight";
-import AddHotel from "./pages/vendor/AddHotel";
 import AddEvent from "./pages/vendor/AddEvent";
 import AddBus from "./pages/vendor/AddBus";
 import AddTravelPackage from "./pages/vendor/AddTravelPackage";
@@ -82,6 +90,14 @@ function App() {
         <Route path="flights/:id/review" element={<FlightReviewBooking />} />
         <Route path="flights/:id/payment" element={<FlightPayment />} />
         <Route path="flights/:id/confirmation" element={<BookingConfirmation type="flight" />} />
+        <Route path="hotels" element={<HotelList />} />
+        <Route path="hotels/list" element={<HotelList />} />
+        <Route path="hotels/confirmation/:id" element={<HotelBookingConfirmation />} />
+        <Route path="hotels/:id" element={<HotelDetails />} />
+        <Route path="hotels/:id/rooms" element={<HotelRoomSelection />} />
+        <Route path="hotels/:id/guests" element={<HotelGuestDetails />} />
+        <Route path="hotels/:id/payment" element={<HotelPayment />} />
+        <Route path="my-hotel-bookings" element={<MyHotelBookings />} />
         <Route path="my-bookings" element={<MyBookings />} />
         <Route path="wallet" element={<TixWallet />} />
         <Route path="profile" element={<Profile />} />
@@ -145,6 +161,22 @@ function App() {
         }
       />
       <Route
+        path="/vendor/hotels"
+        element={
+          <ProtectedRoute roles={["vendor", "admin"]}>
+            <HotelVendorDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendor/hotel/add"
+        element={
+          <ProtectedRoute roles={["vendor", "admin"]}>
+            <AddHotel />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/vendor/*"
         element={
           <ProtectedRoute roles={["vendor", "admin"]}>
@@ -170,11 +202,7 @@ function App() {
       />
       <Route
         path="/add-hotel"
-        element={
-          <ProtectedRoute roles={["vendor", "admin"]}>
-            <AddHotel />
-          </ProtectedRoute>
-        }
+        element={<Navigate to="/vendor/hotel/add" replace />}
       />
       <Route
         path="/add-event"
