@@ -107,7 +107,7 @@ function FlightPayment() {
           <div className="payment-summary-row"><span>Route</span><strong>{flight.fromCode} to {flight.toCode}</strong></div>
           <div className="payment-summary-row"><span>Passenger</span><strong>{passenger?.name || "Not available"}</strong></div>
           <div className="payment-summary-row"><span>Cabin</span><strong>{cabinClass}</strong></div>
-          <div className="payment-summary-row"><span>Seats</span><strong>{seats.join(", ")}</strong></div>
+          <div className="payment-summary-row"><span>Seats</span><strong>{seats.join(", ") || "Not Assigned"}</strong></div>
           <div className="payment-summary-row"><span>Base fare</span><strong>Rs {baseFare}</strong></div>
           <div className="payment-summary-row"><span>Taxes</span><strong>Rs {taxes}</strong></div>
           <div className="payment-summary-row"><span>Platform fee</span><strong>Rs {platformFee}</strong></div>

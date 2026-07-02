@@ -28,12 +28,13 @@ const datesBetween = (start, end) => {
 const vendorFilter = (req, alias = "") => req.user.role === "admin"
   ? { sql: "1=1", params: [] }
   : { sql: `${alias}vendor_id = ?`, params: [req.user.id] };
-const status = (value) => ["active", "inactive", "hidden"].includes(value) ? value : "active";
+const status = (value) => ["draft", "active", "inactive", "hidden"].includes(value) ? value : "active";
 const serializeHotel = (row) => ({
   ...row,
   amenities: json(row.amenities),
   images: json(row.images),
   policies: json(row.policies),
+  onboardingData: json(row.onboarding_data, {}),
   minPrice: n(row.min_price ?? row.minPrice),
   totalRooms: n(row.total_rooms ?? row.totalRooms),
   availableRooms: n(row.available_rooms ?? row.availableRooms),
@@ -53,6 +54,13 @@ const serializeRoom = (row) => ({
   maxAdults: n(row.max_adults),
   maxChildren: n(row.max_children),
   taxPercent: n(row.tax_percent),
+  weekdayPrice: n(row.weekday_price ?? row.base_price),
+  weekendPrice: n(row.weekend_price ?? row.base_price),
+  seasonalPrice: n(row.seasonal_price ?? row.base_price),
+  extraAdultCharge: n(row.extra_adult_charge),
+  extraChildCharge: n(row.extra_child_charge),
+  discountPercent: n(row.discount_percent),
+  offerPrice: n(row.offer_price ?? row.base_price),
 });
 
 const imageAggregate = `(SELECT COALESCE(JSON_ARRAYAGG(JSON_OBJECT('id', hi.id, 'url', hi.image_url, 'alt', hi.alt_text, 'isPrimary', hi.is_primary)), JSON_ARRAY()) FROM hotel_images hi WHERE hi.hotel_id = h.id)`;
@@ -238,7 +246,28 @@ async function vendorHotels(req, res) {
 }
 
 const hotelPayload = (body) => ({
-  name: text(body.name || body.hotelName), slug: text(body.name || body.hotelName).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""), description: text(body.description), hotelType: text(body.hotelType) || "Hotel", starRating: Math.min(5, Math.max(0,n(body.starRating))), address: text(body.address), city: text(body.city), state: text(body.state), country: text(body.country) || "India", postalCode: text(body.postalCode), latitude: body.latitude || null, longitude: body.longitude || null, phone: text(body.phone), email: text(body.email), checkInTime: text(body.checkInTime) || "14:00", checkOutTime: text(body.checkOutTime) || "11:00", amenities: Array.isArray(body.amenities) ? body.amenities : String(body.amenities || "").split(",").map((x)=>x.trim()).filter(Boolean), status: status(body.status), images: Array.isArray(body.images) ? body.images : [], policies: Array.isArray(body.policies) ? body.policies : [],
+  name: text(body.name || body.hotelName),
+  slug: text(body.name || body.hotelName).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+  description: text(body.description),
+  hotelType: text(body.hotelType || body.propertyType) || "Hotel",
+  starRating: Math.min(5, Math.max(0, n(body.starRating))),
+  address: text(body.address || body.fullAddress),
+  city: text(body.city),
+  state: text(body.state),
+  country: text(body.country) || "India",
+  postalCode: text(body.postalCode || body.pincode),
+  latitude: body.latitude || null,
+  longitude: body.longitude || null,
+  phone: text(body.phone || body.mobileNumber),
+  email: text(body.email),
+  checkInTime: text(body.checkInTime) || "14:00",
+  checkOutTime: text(body.checkOutTime) || "11:00",
+  amenities: Array.isArray(body.amenities) ? body.amenities : String(body.amenities || "").split(",").map((item) => item.trim()).filter(Boolean),
+  status: status(body.status),
+  images: Array.isArray(body.images) ? body.images : [],
+  policies: Array.isArray(body.policies) ? body.policies : [],
+  rooms: Array.isArray(body.rooms) ? body.rooms : null,
+  onboardingData: body.onboardingData && typeof body.onboardingData === "object" ? body.onboardingData : null,
 });
 async function replaceHotelChildren(connection, hotelId, payload) {
   await connection.query("DELETE FROM hotel_images WHERE hotel_id=?", [hotelId]);
@@ -246,17 +275,86 @@ async function replaceHotelChildren(connection, hotelId, payload) {
   await connection.query("DELETE FROM hotel_policies WHERE hotel_id=?", [hotelId]);
   for (let index=0; index<payload.policies.length; index+=1) { const policy=payload.policies[index]; if (text(policy.description)) await connection.query("INSERT INTO hotel_policies (id,hotel_id,policy_type,title,description,sort_order) VALUES (?,?,?,?,?,?)", [id(),hotelId,text(policy.type)||"general",text(policy.title)||"Policy",text(policy.description),index]); }
 }
-async function createHotel(req,res) {
-  await ready; const p=hotelPayload(req.body); if(!p.name||!p.city||!p.address) return res.status(400).json({message:"Hotel name, city, and address are required."}); const connection=await pool.getConnection();
-  try { await connection.beginTransaction(); const hotelId=id(); await connection.query(`INSERT INTO hotels (id,vendor_id,hotel_name,name,slug,description,hotel_type,star_rating,address,city,state,country,postal_code,latitude,longitude,phone,email,check_in_time,check_out_time,amenities,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,[hotelId,req.user.id,p.name,p.name,p.slug,p.description,p.hotelType,p.starRating,p.address,p.city,p.state,p.country,p.postalCode,p.latitude,p.longitude,p.phone,p.email,p.checkInTime,p.checkOutTime,JSON.stringify(p.amenities),p.status]); await replaceHotelChildren(connection,hotelId,p); await connection.commit(); res.status(201).json({id:hotelId,message:"Hotel created successfully."}); } catch(error){await connection.rollback();res.status(500).json({message:error.message});} finally{connection.release();}
+async function replaceHotelRooms(connection, hotelId, vendorId, rooms) {
+  if (!Array.isArray(rooms)) return;
+  await connection.query("DELETE ri FROM hotel_room_images ri JOIN hotel_rooms r ON r.id=ri.room_id WHERE r.hotel_id=?", [hotelId]);
+  await connection.query("DELETE FROM hotel_rooms WHERE hotel_id=?", [hotelId]);
+  for (const source of rooms) {
+    const room = roomPayload(source);
+    if (!room.name || !room.roomType) continue;
+    const roomId = id();
+    await connection.query(`INSERT INTO hotel_rooms
+      (id,hotel_id,vendor_id,name,room_type,description,max_adults,max_children,bed_type,room_size,total_rooms,base_price,
+       weekday_price,weekend_price,seasonal_price,extra_adult_charge,extra_child_charge,tax_percent,discount_percent,offer_price,
+       amenities,refundable,meal_plan,status)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [
+      roomId, hotelId, vendorId, room.name, room.roomType, room.description, room.maxAdults, room.maxChildren,
+      room.bedType, room.roomSize, room.totalRooms, room.basePrice, room.weekdayPrice, room.weekendPrice,
+      room.seasonalPrice, room.extraAdultCharge, room.extraChildCharge, room.taxPercent, room.discountPercent,
+      room.offerPrice, JSON.stringify(room.amenities), room.refundable, room.mealPlan, room.status,
+    ]);
+    await replaceRoomImages(connection, roomId, room.images);
+  }
+}
+
+async function createHotel(req, res) {
+  await ready;
+  const payload = hotelPayload(req.body);
+  if (!payload.name || (payload.status !== "draft" && (!payload.city || !payload.address))) {
+    return res.status(400).json({ message: payload.status === "draft" ? "Hotel name is required." : "Hotel name, city, and address are required." });
+  }
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const hotelId = id();
+    await connection.query(`INSERT INTO hotels
+      (id,vendor_id,hotel_name,name,slug,description,hotel_type,star_rating,address,city,state,country,postal_code,latitude,longitude,
+       phone,email,check_in_time,check_out_time,amenities,onboarding_data,status)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [
+      hotelId, req.user.id, payload.name, payload.name, payload.slug, payload.description, payload.hotelType,
+      payload.starRating, payload.address, payload.city, payload.state, payload.country, payload.postalCode,
+      payload.latitude, payload.longitude, payload.phone, payload.email, payload.checkInTime, payload.checkOutTime,
+      JSON.stringify(payload.amenities), JSON.stringify(payload.onboardingData || {}), payload.status,
+    ]);
+    await replaceHotelChildren(connection, hotelId, payload);
+    await replaceHotelRooms(connection, hotelId, req.user.id, payload.rooms);
+    await connection.commit();
+    res.status(201).json({ id: hotelId, status: payload.status, message: payload.status === "draft" ? "Hotel draft saved successfully." : "Hotel published successfully." });
+  } catch (error) {
+    await connection.rollback();
+    res.status(error.status || 500).json({ message: error.message });
+  } finally { connection.release(); }
 }
 async function vendorHotel(req,res) { await ready; const filter=vendorFilter(req,"h."); req.params.id=req.params.id; const [rows]=await pool.query(`SELECT h.*,${imageAggregate} images FROM hotels h WHERE h.id=? AND ${filter.sql}`,[req.params.id,...filter.params]); if(!rows.length)return res.status(404).json({message:"Hotel not found."}); const [policies]=await pool.query("SELECT id,policy_type type,title,description FROM hotel_policies WHERE hotel_id=? ORDER BY sort_order",[req.params.id]); res.json({...serializeHotel(rows[0]),policies}); }
-async function updateHotel(req,res) { await ready; const p=hotelPayload(req.body); const filter=vendorFilter(req); const connection=await pool.getConnection(); try{await connection.beginTransaction();const [result]=await connection.query(`UPDATE hotels SET hotel_name=?,name=?,slug=?,description=?,hotel_type=?,star_rating=?,address=?,city=?,state=?,country=?,postal_code=?,latitude=?,longitude=?,phone=?,email=?,check_in_time=?,check_out_time=?,amenities=?,status=? WHERE id=? AND ${filter.sql}`,[p.name,p.name,p.slug,p.description,p.hotelType,p.starRating,p.address,p.city,p.state,p.country,p.postalCode,p.latitude,p.longitude,p.phone,p.email,p.checkInTime,p.checkOutTime,JSON.stringify(p.amenities),p.status,req.params.id,...filter.params]);if(!result.affectedRows)throw Object.assign(new Error("Hotel not found."),{status:404});await replaceHotelChildren(connection,req.params.id,p);await connection.commit();res.json({message:"Hotel updated successfully."});}catch(error){await connection.rollback();res.status(error.status||500).json({message:error.message});}finally{connection.release();} }
+async function updateHotel(req, res) {
+  await ready;
+  const payload = hotelPayload(req.body);
+  const filter = vendorFilter(req);
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [result] = await connection.query(`UPDATE hotels SET hotel_name=?,name=?,slug=?,description=?,hotel_type=?,star_rating=?,address=?,city=?,state=?,country=?,postal_code=?,latitude=?,longitude=?,phone=?,email=?,check_in_time=?,check_out_time=?,amenities=?,onboarding_data=COALESCE(?,onboarding_data),status=? WHERE id=? AND ${filter.sql}`, [
+      payload.name, payload.name, payload.slug, payload.description, payload.hotelType, payload.starRating,
+      payload.address, payload.city, payload.state, payload.country, payload.postalCode, payload.latitude,
+      payload.longitude, payload.phone, payload.email, payload.checkInTime, payload.checkOutTime,
+      JSON.stringify(payload.amenities), payload.onboardingData ? JSON.stringify(payload.onboardingData) : null,
+      payload.status, req.params.id, ...filter.params,
+    ]);
+    if (!result.affectedRows) throw Object.assign(new Error("Hotel not found."), { status: 404 });
+    await replaceHotelChildren(connection, req.params.id, payload);
+    await replaceHotelRooms(connection, req.params.id, req.user.id, payload.rooms);
+    await connection.commit();
+    res.json({ id: req.params.id, status: payload.status, message: payload.status === "draft" ? "Hotel draft updated." : "Hotel updated successfully." });
+  } catch (error) {
+    await connection.rollback();
+    res.status(error.status || 500).json({ message: error.message });
+  } finally { connection.release(); }
+}
 async function deleteHotel(req,res) { await ready; const filter=vendorFilter(req); const [result]=await pool.query(`UPDATE hotels SET status='hidden' WHERE id=? AND ${filter.sql}`,[req.params.id,...filter.params]); if(!result.affectedRows)return res.status(404).json({message:"Hotel not found."});res.json({message:"Hotel hidden successfully."}); }
 async function hotelStatus(req,res) { await ready; const next=status(req.body.status); const filter=vendorFilter(req); const [result]=await pool.query(`UPDATE hotels SET status=? WHERE id=? AND ${filter.sql}`,[next,req.params.id,...filter.params]);if(!result.affectedRows)return res.status(404).json({message:"Hotel not found."});res.json({message:`Hotel ${next}.`}); }
 
 async function vendorRooms(req,res) { await ready; const filter=vendorFilter(req,"r."); const [rows]=await pool.query(`SELECT r.*,${roomImageAggregate} images FROM hotel_rooms r WHERE r.hotel_id=? AND ${filter.sql} ORDER BY r.created_at DESC`,[req.params.hotelId,...filter.params]);res.json(rows.map(serializeRoom)); }
-const roomPayload=(body)=>({name:text(body.name),roomType:text(body.roomType),description:text(body.description),maxAdults:Math.max(1,n(body.maxAdults,2)),maxChildren:Math.max(0,n(body.maxChildren)),bedType:text(body.bedType),roomSize:text(body.roomSize),totalRooms:Math.max(1,n(body.totalRooms,1)),basePrice:Math.max(0,n(body.basePrice)),taxPercent:Math.max(0,n(body.taxPercent,12)),amenities:Array.isArray(body.amenities)?body.amenities:String(body.amenities||"").split(",").map(x=>x.trim()).filter(Boolean),refundable:body.refundable!==false,mealPlan:text(body.mealPlan),status:status(body.status),images:Array.isArray(body.images)?body.images:[]});
+const roomPayload=(body)=>{const basePrice=Math.max(0,n(body.basePrice||body.offerPrice||body.weekdayPrice));return {name:text(body.name||body.roomName),roomType:text(body.roomType),description:text(body.description||body.roomDescription),maxAdults:Math.max(1,n(body.maxAdults||body.adults,2)),maxChildren:Math.max(0,n(body.maxChildren??body.children)),bedType:text(body.bedType),roomSize:text(body.roomSize),totalRooms:Math.max(1,n(body.totalRooms,1)),basePrice,weekdayPrice:Math.max(0,n(body.weekdayPrice,basePrice)),weekendPrice:Math.max(0,n(body.weekendPrice,basePrice)),seasonalPrice:Math.max(0,n(body.seasonalPrice,basePrice)),extraAdultCharge:Math.max(0,n(body.extraAdultCharge)),extraChildCharge:Math.max(0,n(body.extraChildCharge)),taxPercent:Math.max(0,n(body.taxPercent,12)),discountPercent:Math.max(0,n(body.discountPercent)),offerPrice:Math.max(0,n(body.offerPrice,basePrice)),amenities:Array.isArray(body.amenities)?body.amenities:String(body.amenities||"").split(",").map(x=>x.trim()).filter(Boolean),refundable:body.refundable!==false,mealPlan:text(body.mealPlan),status:status(body.status),images:Array.isArray(body.images)?body.images:[]};};
 async function replaceRoomImages(connection,roomId,images){await connection.query("DELETE FROM hotel_room_images WHERE room_id=?",[roomId]);for(let i=0;i<images.length;i+=1){const image=images[i];const url=typeof image==="string"?image:image.url||image.data;if(url)await connection.query("INSERT INTO hotel_room_images (id,room_id,image_url,alt_text,is_primary,sort_order) VALUES (?,?,?,?,?,?)",[id(),roomId,url,text(image.alt),Boolean(image.isPrimary||i===0),i]);}}
 async function createRoom(req,res){await ready;const p=roomPayload(req.body);const filter=vendorFilter(req);const [hotels]=await pool.query(`SELECT * FROM hotels WHERE id=? AND ${filter.sql}`,[req.params.hotelId,...filter.params]);if(!hotels.length)return res.status(404).json({message:"Hotel not found."});if(!p.name||!p.roomType||!p.basePrice)return res.status(400).json({message:"Room name, type, and price are required."});const connection=await pool.getConnection();try{await connection.beginTransaction();const roomId=id();await connection.query(`INSERT INTO hotel_rooms (id,hotel_id,vendor_id,name,room_type,description,max_adults,max_children,bed_type,room_size,total_rooms,base_price,tax_percent,amenities,refundable,meal_plan,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,[roomId,req.params.hotelId,hotels[0].vendor_id,p.name,p.roomType,p.description,p.maxAdults,p.maxChildren,p.bedType,p.roomSize,p.totalRooms,p.basePrice,p.taxPercent,JSON.stringify(p.amenities),p.refundable,p.mealPlan,p.status]);await replaceRoomImages(connection,roomId,p.images);await connection.commit();res.status(201).json({id:roomId,message:"Room added."});}catch(error){await connection.rollback();res.status(500).json({message:error.message});}finally{connection.release();}}
 async function updateRoom(req,res){await ready;const p=roomPayload(req.body);const filter=vendorFilter(req,"r.");const connection=await pool.getConnection();try{await connection.beginTransaction();const [result]=await connection.query(`UPDATE hotel_rooms r SET name=?,room_type=?,description=?,max_adults=?,max_children=?,bed_type=?,room_size=?,total_rooms=?,base_price=?,tax_percent=?,amenities=?,refundable=?,meal_plan=?,status=? WHERE r.id=? AND ${filter.sql}`,[p.name,p.roomType,p.description,p.maxAdults,p.maxChildren,p.bedType,p.roomSize,p.totalRooms,p.basePrice,p.taxPercent,JSON.stringify(p.amenities),p.refundable,p.mealPlan,p.status,req.params.roomId,...filter.params]);if(!result.affectedRows)throw Object.assign(new Error("Room not found."),{status:404});await replaceRoomImages(connection,req.params.roomId,p.images);await connection.query("UPDATE hotel_inventory_calendar SET total_rooms=?,available_rooms=GREATEST(0,?-booked_rooms-blocked_rooms),price=IF(price=0,?,price) WHERE room_id=? AND inventory_date>=CURDATE()",[p.totalRooms,p.totalRooms,p.basePrice,req.params.roomId]);await connection.commit();res.json({message:"Room updated."});}catch(error){await connection.rollback();res.status(error.status||500).json({message:error.message});}finally{connection.release();}}

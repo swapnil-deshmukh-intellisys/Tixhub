@@ -1,0 +1,20 @@
+.boarding-pass-page { max-width: 1050px; margin: 24px auto; padding: 24px; }
+.boarding-pass-back { border: 0; background: transparent; cursor: pointer; }
+.boarding-pass-card { overflow: hidden; margin: 20px 0; border: 1px solid #dbeafe; border-radius: 18px; background: #fff; box-shadow: 0 12px 32px rgba(15,23,42,.09); }
+.boarding-pass-card header { display: flex; justify-content: space-between; padding: 18px 22px; color: #fff; background: #1d4ed8; }
+.boarding-pass-card header div { display: flex; align-items: center; gap: 9px; }
+.boarding-pass-content { display: grid; grid-template-columns: 1fr auto; gap: 24px; padding: 25px; }
+.boarding-pass-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 17px; }
+.boarding-pass-fields p { display: flex; flex-direction: column; margin: 0; }
+.boarding-pass-fields span { color: #64748b; font-size: .76rem; text-transform: uppercase; }
+.boarding-pass-qr { display: flex; flex-direction: column; align-items: center; }
+.boarding-pass-print { padding: 12px 20px; border: 0; border-radius: 9px; color: #fff; background: #2563eb; cursor: pointer; }
+@media (max-width:700px) { .boarding-pass-content,.boarding-pass-fields { grid-template-columns: 1fr; } }
+@media print { .boarding-pass-back,.boarding-pass-print { display:none; } .boarding-pass-card { box-shadow:none; } }
+.boarding-pass-verify-page { min-height: 100vh; padding: 45px 20px; background: #eff6ff; }
+.boarding-pass-verify-card { max-width: 620px; margin: auto; padding: 28px; border-radius: 16px; background: #fff; box-shadow: 0 12px 32px rgba(15,23,42,.09); }
+.boarding-pass-verify-card h1 { display: flex; align-items: center; gap: 10px; }
+.boarding-pass-valid { margin-top: 20px; padding: 20px; border-radius: 12px; color: #166534; background: #ecfdf5; }
+.boarding-pass-valid > svg { font-size: 2rem; }
+.boarding-pass-invalid { margin-top: 20px; padding: 20px; border-radius: 12px; color: #991b1b; background: #fef2f2; }
+.boarding-pass-invalid > svg { font-size: 2rem; }

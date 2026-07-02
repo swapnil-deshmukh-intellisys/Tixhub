@@ -18,6 +18,10 @@ import FlightSeatSelection from "./pages/FlightSeatSelection";
 import FlightReviewBooking from "./pages/FlightReviewBooking";
 import FlightPayment from "./pages/FlightPayment";
 import MyBookings from "./pages/MyBookings";
+import FlightManageSeat from "./pages/FlightManageSeat";
+import FlightCheckIn from "./pages/FlightCheckIn";
+import FlightBoardingPass from "./pages/FlightBoardingPass";
+import VerifyBoardingPass from "./pages/VerifyBoardingPass";
 import TixWallet from "./pages/TixWallet";
 import Profile from "./pages/Profile";
 import CatalogContent from "./pages/CatalogContent";
@@ -66,6 +70,7 @@ function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
+      <Route path="/verify/boarding-pass/:bookingId" element={<VerifyBoardingPass />} />
 
       <Route
         path="/dashboard"
@@ -99,6 +104,9 @@ function App() {
         <Route path="hotels/:id/payment" element={<HotelPayment />} />
         <Route path="my-hotel-bookings" element={<MyHotelBookings />} />
         <Route path="my-bookings" element={<MyBookings />} />
+        <Route path="flight-bookings/:bookingId/manage-seat" element={<FlightManageSeat />} />
+        <Route path="flight-bookings/:bookingId/check-in" element={<FlightCheckIn />} />
+        <Route path="flight-bookings/:bookingId/boarding-pass" element={<FlightBoardingPass />} />
         <Route path="wallet" element={<TixWallet />} />
         <Route path="profile" element={<Profile />} />
         <Route path="browse" element={<CatalogContent module="browse" />} />
@@ -199,10 +207,6 @@ function App() {
             <AddFlight />
           </ProtectedRoute>
         }
-      />
-      <Route
-        path="/add-hotel"
-        element={<Navigate to="/vendor/hotel/add" replace />}
       />
       <Route
         path="/add-event"

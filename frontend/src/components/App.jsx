@@ -30,7 +30,6 @@ import VendorDashboard from "./pages/vendor/VendorDashboard";
 import MovieVendorDashboard from "./pages/vendor/MovieVendorDashboard";
 import AddMovie from "./pages/vendor/AddMovie";
 import AddFlight from "./pages/vendor/AddFlight";
-import AddHotel from "./pages/vendor/AddHotel";
 import AddEvent from "./pages/vendor/AddEvent";
 import AddBus from "./pages/vendor/AddBus";
 import AddTravelPackage from "./pages/vendor/AddTravelPackage";
@@ -157,14 +156,6 @@ function App() {
         element={
           <ProtectedRoute roles={["vendor", "admin"]}>
             <AddFlight />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/add-hotel"
-        element={
-          <ProtectedRoute roles={["vendor", "admin"]}>
-            <AddHotel />
           </ProtectedRoute>
         }
       />

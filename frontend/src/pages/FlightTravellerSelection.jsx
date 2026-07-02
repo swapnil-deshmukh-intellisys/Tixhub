@@ -6,7 +6,7 @@ import "./FlightTravellerSelection.css";
 function FlightTravellerSelection() {
   const navigate = useNavigate();
   const location = useLocation();
-  const saved = JSON.parse(sessionStorage.getItem("flightSeatSelection") || "null");
+  const saved = JSON.parse(sessionStorage.getItem("flightSeatSelection") || sessionStorage.getItem("selectedFlight") || "null");
   const payload = location.state || saved || {};
   const { flight, search = {}, seats = [], seatFee = 250, cabinClass = "Economy", totalTravellers = 1 } = payload;
   const [passenger, setPassenger] = useState({

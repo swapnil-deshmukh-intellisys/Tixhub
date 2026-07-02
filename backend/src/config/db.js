@@ -240,6 +240,7 @@ const ensureFlightsSchema = async (connection) => {
       id VARCHAR(24) NOT NULL PRIMARY KEY,
       vendor_id VARCHAR(24) NULL,
       airline_name VARCHAR(255) NOT NULL,
+      flight_name VARCHAR(255) NULL,
       airline_logo TEXT NULL,
       flight_number VARCHAR(80) NOT NULL,
       flight_type VARCHAR(80) NOT NULL DEFAULT 'domestic',
@@ -269,6 +270,8 @@ const ensureFlightsSchema = async (connection) => {
       meal_included BOOLEAN NOT NULL DEFAULT FALSE,
       status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
       seats JSON NULL,
+      seat_selection_mode ENUM('DURING_BOOKING','AFTER_BOOKING','CHECK_IN','AUTO_ASSIGN') NOT NULL DEFAULT 'CHECK_IN',
+      check_in_open_hours_before INT NOT NULL DEFAULT 24,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_flights_vendor_id (vendor_id),
@@ -281,9 +284,12 @@ const ensureFlightsSchema = async (connection) => {
   const columnMap = new Map(columns.map((column) => [column.Field, column]));
   await ensureColumn(connection, "flights", columnMap, "vendor_id", "VARCHAR(24) NULL");
   await ensureColumn(connection, "flights", columnMap, "airline_logo", "TEXT NULL");
+  await ensureColumn(connection, "flights", columnMap, "flight_name", "VARCHAR(255) NULL");
   await ensureColumn(connection, "flights", columnMap, "booked_seats", "INT NOT NULL DEFAULT 0");
   await ensureColumn(connection, "flights", columnMap, "blocked_seats", "INT NOT NULL DEFAULT 0");
   await ensureColumn(connection, "flights", columnMap, "seats", "JSON NULL");
+  await ensureColumn(connection, "flights", columnMap, "seat_selection_mode", "ENUM('DURING_BOOKING','AFTER_BOOKING','CHECK_IN','AUTO_ASSIGN') NOT NULL DEFAULT 'CHECK_IN'");
+  await ensureColumn(connection, "flights", columnMap, "check_in_open_hours_before", "INT NOT NULL DEFAULT 24");
 };
 
 const ensureBookingsSchema = async (connection) => {
@@ -330,7 +336,13 @@ const ensureBookingsSchema = async (connection) => {
   await ensureColumn(connection, "bookings", columnMap, "checked_in", "BOOLEAN NOT NULL DEFAULT FALSE");
   await ensureColumn(connection, "bookings", columnMap, "checked_in_at", "DATETIME NULL");
   await ensureColumn(connection, "bookings", columnMap, "scanned_by", "VARCHAR(24) NULL");
-  await connection.query("ALTER TABLE bookings MODIFY payment_status ENUM('pending','success','paid','failed','refunded') NOT NULL DEFAULT 'pending'");
+  await ensureColumn(connection, "bookings", columnMap, "pnr", "VARCHAR(32) NULL UNIQUE");
+  await ensureColumn(connection, "bookings", columnMap, "seat_number", "VARCHAR(40) NULL");
+  await ensureColumn(connection, "bookings", columnMap, "check_in_status", "ENUM('NOT_CHECKED_IN','CHECKED_IN') NOT NULL DEFAULT 'NOT_CHECKED_IN'");
+  await ensureColumn(connection, "bookings", columnMap, "boarding_pass_generated", "BOOLEAN NOT NULL DEFAULT FALSE");
+  await ensureColumn(connection, "bookings", columnMap, "qr_data", "TEXT NULL");
+  await connection.query("ALTER TABLE bookings MODIFY payment_status VARCHAR(40) NOT NULL DEFAULT 'pending'");
+  await connection.query("ALTER TABLE bookings MODIFY booking_status VARCHAR(40) NOT NULL DEFAULT 'confirmed'");
 
   await connection.query(`
     CREATE TABLE IF NOT EXISTS flight_bookings (
@@ -342,7 +354,7 @@ const ensureBookingsSchema = async (connection) => {
       passenger_name VARCHAR(150) NOT NULL,
       passenger_mobile VARCHAR(30) NOT NULL,
       passenger_email VARCHAR(190) NOT NULL,
-      seat_number VARCHAR(120) NOT NULL,
+      seat_number VARCHAR(120) NULL,
       class_type VARCHAR(120) NOT NULL,
       total_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
       booking_status ENUM('pending', 'confirmed', 'completed', 'cancelled', 'refunded') NOT NULL DEFAULT 'confirmed',
@@ -355,6 +367,9 @@ const ensureBookingsSchema = async (connection) => {
       INDEX idx_flight_bookings_flight_id (flight_id)
     )
   `);
+  await connection.query("ALTER TABLE flight_bookings MODIFY seat_number VARCHAR(120) NULL");
+  await connection.query("ALTER TABLE flight_bookings MODIFY booking_status VARCHAR(40) NOT NULL DEFAULT 'confirmed'");
+  await connection.query("ALTER TABLE flight_bookings MODIFY payment_status VARCHAR(40) NOT NULL DEFAULT 'paid'");
 };
 
 const ensureMovieSeatsSchema = async (connection) => {
@@ -411,12 +426,23 @@ const ensureHotelSchema = async (connection) => {
     ["postal_code", "VARCHAR(20) NULL"], ["latitude", "DECIMAL(10,7) NULL"], ["longitude", "DECIMAL(10,7) NULL"],
     ["phone", "VARCHAR(40) NULL"], ["email", "VARCHAR(190) NULL"],
     ["check_in_time", "TIME NOT NULL DEFAULT '14:00:00'"], ["check_out_time", "TIME NOT NULL DEFAULT '11:00:00'"],
-    ["amenities", "JSON NULL"],
+    ["amenities", "JSON NULL"], ["onboarding_data", "JSON NULL"],
   ];
   for (const [name, definition] of hotelAdditions) await ensureColumn(connection, "hotels", hotels, name, definition);
+  await connection.query("ALTER TABLE hotels MODIFY status ENUM('draft','active','inactive','hidden') NOT NULL DEFAULT 'active'");
   if (hotels.has("hotel_name")) {
     await connection.query("UPDATE hotels SET name=COALESCE(NULLIF(name,''),hotel_name), slug=COALESCE(NULLIF(slug,''),LOWER(REPLACE(hotel_name,' ','-'))) WHERE name IS NULL OR name='' OR slug IS NULL OR slug=''");
   }
+
+  const [roomColumns] = await connection.query("SHOW COLUMNS FROM hotel_rooms");
+  const rooms = new Map(roomColumns.map((column) => [column.Field, column]));
+  const roomPricingAdditions = [
+    ["weekday_price", "DECIMAL(12,2) NOT NULL DEFAULT 0"], ["weekend_price", "DECIMAL(12,2) NOT NULL DEFAULT 0"],
+    ["seasonal_price", "DECIMAL(12,2) NOT NULL DEFAULT 0"], ["extra_adult_charge", "DECIMAL(12,2) NOT NULL DEFAULT 0"],
+    ["extra_child_charge", "DECIMAL(12,2) NOT NULL DEFAULT 0"], ["discount_percent", "DECIMAL(5,2) NOT NULL DEFAULT 0"],
+    ["offer_price", "DECIMAL(12,2) NOT NULL DEFAULT 0"],
+  ];
+  for (const [name, definition] of roomPricingAdditions) await ensureColumn(connection, "hotel_rooms", rooms, name, definition);
 
   const [bookingColumns] = await connection.query("SHOW COLUMNS FROM hotel_bookings");
   const bookings = new Map(bookingColumns.map((column) => [column.Field, column]));

@@ -1,0 +1,2 @@
+ALTER TABLE flights
+  ADD COLUMN IF NOT EXISTS flight_name VARCHAR(255) NULL AFTER airline_name;

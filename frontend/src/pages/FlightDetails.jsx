@@ -39,7 +39,9 @@ function FlightDetails() {
   const continueFlow = () => {
     const payload = { flight, search };
     sessionStorage.setItem("selectedFlight", JSON.stringify(payload));
-    navigate(`/dashboard/flights/${flight.id || flight._id}/seats`, { state: payload });
+    const nextStep = flight.seatSelectionMode === "DURING_BOOKING" ? "seats" : "passengers";
+    if (nextStep === "passengers") sessionStorage.removeItem("flightSeatSelection");
+    navigate(`/dashboard/flights/${flight.id || flight._id}/${nextStep}`, { state: payload });
   };
 
   return (
@@ -88,7 +90,10 @@ function FlightDetails() {
             <span>{flight.departureDate || "Date not available"}</span>
             <span>{flight.availableSeats ?? "Seats not available"} seats available</span>
           </div>
-          <button onClick={continueFlow}>Select Seats</button>
+          {flight.seatSelectionMode === "CHECK_IN" && <p>Seat selection will open during check-in.</p>}
+          {flight.seatSelectionMode === "AFTER_BOOKING" && <p>You can select a seat from Manage Booking after payment.</p>}
+          {flight.seatSelectionMode === "AUTO_ASSIGN" && <p>Your seat will be assigned automatically during check-in.</p>}
+          <button onClick={continueFlow}>{flight.seatSelectionMode === "DURING_BOOKING" ? "Select Seats" : "Continue Booking"}</button>
         </section>
       </main>
     </div>

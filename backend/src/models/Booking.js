@@ -5,4 +5,9 @@ module.exports = createInMemoryModel("Booking", {
   seats: [],
   status: "confirmed",
   paymentStatus: "paid",
+  pnr: "",
+  seatNumber: null,
+  checkInStatus: "NOT_CHECKED_IN",
+  boardingPassGenerated: false,
+  qrData: null,
 });

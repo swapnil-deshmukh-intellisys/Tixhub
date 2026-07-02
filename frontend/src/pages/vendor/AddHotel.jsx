@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { filesToImages, hotelRequest } from "../../services/hotelApi";
+import FullAddHotel from "./FullAddHotel";
 import "./HotelVendor.css";
 
 const hotelAmenities = [
@@ -403,7 +404,7 @@ export function HotelForm({
 }
 
 export default function AddHotel() {
-  return <HotelForm />;
+  return <FullAddHotel />;
 }
 
 function HotelField({

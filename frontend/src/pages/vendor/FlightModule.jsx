@@ -1,13 +1,18 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { BarChart3, CalendarDays, ClipboardList, Plane, Plus, Ticket, Users } from "lucide-react";
+import { io } from "socket.io-client";
+import { Armchair, CalendarDays, CircleCheck, CircleX, ClipboardList, Eye, Pencil, Plane, Plus, Ticket, Trash2, Wallet } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import "./VendorDashboard.css";
 import "./FlightModule.css";
 
 const apiBase = "http://localhost:5000/api";
+const socketBase = "http://localhost:5000";
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token");
 const auth = () => ({ headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" } });
 
 const emptyFlight = {
+  flightName: "",
   airlineName: "",
   airlineLogo: "",
   flightNumber: "",
@@ -31,6 +36,8 @@ const emptyFlight = {
   platformFee: "",
   ticketPrice: "",
   totalSeats: "",
+  seatSelectionMode: "CHECK_IN",
+  checkInOpenHoursBefore: 24,
   baggageAllowance: "",
   refundPolicy: "",
   cancellationPolicy: "",
@@ -72,6 +79,15 @@ function FlightModule({ page = "dashboard", navigate }) {
     loadFlightData();
   }, []);
 
+  useEffect(() => {
+    const rawUser = localStorage.getItem("ticketproUser") || sessionStorage.getItem("ticketproUser");
+    const user = rawUser ? JSON.parse(rawUser) : {};
+    const socket = io(socketBase, { auth: { token: getToken() }, transports: ["websocket", "polling"] });
+    if (user._id || user.id) socket.emit("joinVendor", user._id || user.id);
+    ["newBooking", "vendorDashboardUpdated"].forEach((eventName) => socket.on(eventName, loadFlightData));
+    return () => socket.disconnect();
+  }, []);
+
   if (page === "add-flight") return <FlightForm reload={loadFlightData} navigate={navigate} />;
   if (page.startsWith("edit-flight")) return <FlightForm editFlight={flights.find((flight) => page.endsWith(flight._id))} reload={loadFlightData} navigate={navigate} />;
   if (page === "my-flights") return <MyFlights flights={flights} reload={loadFlightData} navigate={navigate} />;
@@ -80,73 +96,109 @@ function FlightModule({ page = "dashboard", navigate }) {
   if (page === "passengers") return <Passengers passengers={passengers} />;
   if (page === "flight-revenue") return <FlightRevenue revenue={revenue} />;
   if (page === "flight-reports") return <FlightReports flights={flights} bookings={bookings} stats={stats} />;
-  return <FlightDashboard stats={stats} flights={flights} bookings={bookings} revenue={revenue} loading={loading} navigate={navigate} />;
+  return <FlightDashboard stats={stats} flights={flights} bookings={bookings} revenue={revenue} loading={loading} reload={loadFlightData} navigate={navigate} />;
 }
 
-function FlightDashboard({ stats, flights, bookings, revenue, loading, navigate }) {
+const flightNumber = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+const bookingStatus = (booking) => String(booking.bookingStatus || booking.status || "confirmed").toLowerCase();
+
+function FlightDashboard({ stats, flights, bookings, revenue, loading, reload, navigate }) {
+  const [viewingFlight, setViewingFlight] = useState(null);
+  const [today] = useState(() => new Date().toDateString());
+
+  const summary = useMemo(() => {
+    const totalFlights = flights.length || flightNumber(stats.totalFlights);
+    const activeFlights = flights.filter((flight) => String(flight.status).toLowerCase() === "active").length || flightNumber(stats.activeFlights);
+    const totalBookings = bookings.length || flightNumber(stats.totalBookings);
+    const todayBookings = bookings.filter((booking) => {
+      const date = new Date(booking.bookingDate || booking.createdAt || booking.updatedAt || 0);
+      return !Number.isNaN(date.getTime()) && date.toDateString() === today;
+    }).length || flightNumber(stats.todayBookings);
+    const totalSeats = flights.reduce((sum, flight) => sum + flightNumber(flight.totalSeats), 0);
+    const bookedSeats = flights.reduce((sum, flight) => sum + flightNumber(flight.bookedSeats), 0) || flightNumber(stats.bookedSeats);
+    const availableSeats = Math.max(totalSeats - bookedSeats, 0) || flightNumber(stats.availableSeats);
+    const totalRevenue = bookings.reduce((sum, booking) => sum + flightNumber(booking.amount || booking.totalAmount), 0) || flightNumber(revenue.totalRevenue || stats.totalRevenue);
+    const confirmedBookings = bookings.filter((booking) => bookingStatus(booking) === "confirmed").length;
+    const cancelledBookings = bookings.filter((booking) => bookingStatus(booking) === "cancelled").length;
+    const occupancy = totalSeats ? Math.round((bookedSeats / totalSeats) * 100) : flightNumber(stats.occupancyRate);
+    return { totalFlights, activeFlights, totalBookings, todayBookings, totalSeats, bookedSeats, availableSeats, totalRevenue, confirmedBookings, cancelledBookings, occupancy };
+  }, [bookings, flights, revenue, stats, today]);
+
+  const chartData = useMemo(() => {
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => ({ label, value: 0 }));
+    bookings.forEach((booking) => {
+      const date = new Date(booking.bookingDate || booking.createdAt || booking.updatedAt || 0);
+      if (!Number.isNaN(date.getTime())) days[date.getDay()].value += 1;
+    });
+    return days;
+  }, [bookings]);
+
   const cards = [
-    ["Total Flights", stats.totalFlights || flights.length, Plane],
-    ["Active Flights", stats.activeFlights || flights.filter((flight) => flight.status === "active").length, ClipboardList],
-    ["Today Bookings", stats.todayBookings || 0, CalendarDays],
-    ["Total Passengers", stats.totalPassengers || bookings.length, Users],
-    ["Total Revenue", `Rs ${stats.totalRevenue || revenue.totalRevenue || 0}`, BarChart3],
-    ["Available Seats", stats.availableSeats || 0, Ticket],
-    ["Booked Seats", stats.bookedSeats || 0, Ticket],
-    ["Blocked Seats", stats.blockedSeats || 0, Ticket],
+    ["Total Flights", summary.totalFlights, Plane],
+    ["Active Flights", summary.activeFlights, CircleCheck],
+    ["Total Bookings", summary.totalBookings, Ticket],
+    ["Today's Bookings", summary.todayBookings, CalendarDays],
+    ["Revenue", `Rs ${summary.totalRevenue}`, Wallet],
+    ["Available Seats", summary.availableSeats, Armchair],
   ];
+
+  const deleteFlight = async (flight) => {
+    if (!window.confirm(`Delete ${flight.flightNumber}?`)) return;
+    await axios.delete(`${apiBase}/vendor/flights/${flight._id}`, auth());
+    await reload();
+  };
 
   return (
     <>
       {loading && <div className="vendor-alert">Loading flight module...</div>}
+      <section className="flight-vendor-hero">
+        <div className="flight-vendor-hero-left"><span className="flight-vendor-icon"><Plane size={34} /></span><div><h1>Flight Vendor</h1><p>Manage flights, schedules, seats, bookings, and revenue.</p></div></div>
+        <button className="flight-vendor-add-button" type="button" onClick={() => navigate("/vendor/add-flight")}><Plus size={18} />Add Flight</button>
+      </section>
+
       <section className="vendor-card-grid flight-card-grid">
-        {cards.map(([label, value, Icon]) => (
-          <article className="vendor-kpi-card" key={label}>
-            <div><p>{label}</p><h2>{value}</h2><span>Flight module</span></div>
-            <div className="flight-kpi-icon"><Icon size={22} /></div>
-          </article>
-        ))}
+        {cards.map(([label, value, Icon]) => <article className="vendor-kpi-card flight-kpi-card" key={label}><div className="flight-kpi-icon"><Icon size={20} /></div><div><p>{label}</p><h2>{value}</h2><span>Flight module</span></div></article>)}
       </section>
-      <section className="vendor-dashboard-grid">
-        <article className="vendor-panel flight-chart-panel">
-          <PanelTitle title="Bookings Overview Chart" />
-          <MiniBars values={[30, 55, 44, 72, 63, 80, 58]} />
-        </article>
-        <article className="vendor-panel flight-chart-panel">
-          <PanelTitle title="Revenue Overview Chart" right="Live" />
-          <h3>Rs {revenue.totalRevenue || stats.totalRevenue || 0}</h3>
-          <MiniBars values={[42, 38, 66, 48, 74, 56, 82]} />
-        </article>
-        <article className="vendor-panel">
-          <PanelTitle title="Top Routes" right="Routes" />
-          <div className="flight-list">
-            {(stats.topRoutes || []).length ? stats.topRoutes.map((item) => <p key={item.route}><strong>{item.route}</strong><span>{item.count} flights</span></p>) : <p>No routes yet.</p>}
-          </div>
-        </article>
-        <article className="vendor-panel">
-          <PanelTitle title="Quick Actions" right="Vendor" />
-          <div className="quick-action-grid">
-            <button type="button" onClick={() => navigate("/vendor/add-flight")}>Add Flight</button>
-            <button type="button" onClick={() => navigate("/vendor/my-flights")}>My Flights</button>
-            <button type="button" onClick={() => navigate("/vendor/flight-seat-management")}>Flight Seat Management</button>
-            <button type="button" onClick={() => navigate("/vendor/flight-bookings")}>Flight Bookings</button>
-            <button type="button" onClick={() => navigate("/vendor/passengers")}>Passengers</button>
-            <button type="button" onClick={() => navigate("/vendor/flight-revenue")}>Flight Revenue</button>
-          </div>
-        </article>
+
+      <section className="flight-dashboard-main-grid">
+        <article className="vendor-panel flight-quick-panel"><PanelTitle title="Quick Actions" right="Flight" /><div className="flight-action-grid">
+          <button type="button" onClick={() => navigate("/vendor/add-flight")}><Plus size={23} /><span>Add Flight</span></button>
+          <button type="button" onClick={() => navigate("/vendor/my-flights")}><Plane size={23} /><span>My Flights</span></button>
+          <button type="button" onClick={() => navigate("/vendor/flight-seat-management")}><Armchair size={23} /><span>Manage Seats</span></button>
+          <button type="button" onClick={() => navigate("/vendor/flight-bookings")}><ClipboardList size={23} /><span>Bookings</span></button>
+        </div></article>
+        <article className="vendor-panel flight-live-chart-panel"><PanelTitle title="Live Flight Booking Chart" right="Live" /><FlightBookingChart data={chartData} /></article>
+        <article className="vendor-panel flight-status-panel"><PanelTitle title="Booking Status" right={`${summary.occupancy}%`} /><div className="flight-status-summary">
+          <div className="flight-occupancy-ring" style={{ "--value": `${summary.occupancy}%` }}><span><strong>{summary.occupancy}%</strong><small>Occupancy</small></span></div>
+          <div className="flight-status-list"><p><CircleCheck size={16} /><span>Confirmed</span><strong>{summary.confirmedBookings}</strong></p><p><CircleX size={16} /><span>Cancelled</span><strong>{summary.cancelledBookings}</strong></p><p><Armchair size={16} /><span>Booked Seats</span><strong>{summary.bookedSeats}</strong></p><p><Ticket size={16} /><span>Available</span><strong>{summary.availableSeats}</strong></p></div>
+        </div></article>
       </section>
-      <section className="vendor-operations-grid">
-        <DataTable title="Recent Flight Bookings" columns={["Booking ID", "PNR", "Passenger", "Flight", "Seat", "Amount", "Status"]} rows={(stats.recentBookings || bookings).slice(0, 6).map((booking) => [booking.bookingId, booking.pnr, booking.passengerName, booking.flightNumber, booking.seatNumber, `Rs ${booking.amount || 0}`, booking.bookingStatus])} />
-        <article className="vendor-panel">
-          <PanelTitle title="Seat Status Summary" right={`${stats.occupancyRate || 0}%`} />
-          <div className="flight-seat-summary">
-            <span style={{ "--value": `${stats.occupancyRate || 0}%` }} />
-            <p>Occupancy Rate</p>
-            <strong>{stats.occupancyRate || 0}%</strong>
-          </div>
-        </article>
+
+      <section className="vendor-panel vendor-page-panel flight-list-panel">
+        <div className="panel-title"><h2>Flight Listings</h2><button type="button" onClick={() => navigate("/vendor/my-flights")}>View All Flights</button></div>
+        <div className="vendor-table-shell"><table className="vendor-table flight-list-table"><thead><tr><th>Flight Name</th><th>Flight Number</th><th>From</th><th>To</th><th>Departure Time</th><th>Arrival Time</th><th>Price</th><th>Total Seats</th><th>Booked Seats</th><th>Available Seats</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+          {flights.length ? flights.map((flight) => {
+            const totalSeats = flightNumber(flight.totalSeats);
+            const bookedSeats = flightNumber(flight.bookedSeats);
+            const availableSeats = Math.max(totalSeats - bookedSeats, 0);
+            return <tr key={flight._id}><td><div className="flight-name-cell">{flight.airlineLogo ? <img className="flight-logo" src={flight.airlineLogo} alt="" /> : <span><Plane size={17} /></span>}<div><strong>{flight.flightName || flight.airlineName || "Flight"}</strong><small>{flight.airlineName || "Airline"}</small></div></div></td><td>{flight.flightNumber || "-"}</td><td>{flight.fromCode || flight.fromCity || "-"}</td><td>{flight.toCode || flight.toCity || "-"}</td><td>{flight.departureTime || "-"}</td><td>{flight.arrivalTime || "-"}</td><td>Rs {flightNumber(flight.ticketPrice || flight.price)}</td><td>{totalSeats}</td><td>{bookedSeats}</td><td>{availableSeats}</td><td><span className="vendor-status">{flight.status || "active"}</span></td><td><div className="flight-icon-actions"><button title="View" onClick={() => setViewingFlight(flight)}><Eye size={15} /></button><button title="Edit" onClick={() => navigate(`/vendor/edit-flight/${flight._id}`)}><Pencil size={15} /></button><button title="Delete" onClick={() => deleteFlight(flight)}><Trash2 size={15} /></button><button title="Manage seats" onClick={() => navigate("/vendor/flight-seat-management", { state: { flightId: flight._id } })}><Armchair size={15} /></button><button title="Bookings" onClick={() => navigate("/vendor/flight-bookings")}><ClipboardList size={15} /></button></div></td></tr>;
+          }) : <tr><td colSpan="12">No flight listings available yet.</td></tr>}
+        </tbody></table></div>
       </section>
+
+      <FlightViewModal flight={viewingFlight} onClose={() => setViewingFlight(null)} />
     </>
   );
+}
+
+function FlightBookingChart({ data }) {
+  const maxValue = Math.max(...data.map((item) => item.value), 1);
+  return <div className="flight-booking-chart">{data.map((item) => <div key={item.label}><strong>{item.value}</strong><span style={{ height: `${Math.max((item.value / maxValue) * 100, 8)}%` }} /><small>{item.label}</small></div>)}</div>;
+}
+
+function FlightViewModal({ flight, onClose }) {
+  if (!flight) return null;
+  return <div className="flight-view-backdrop" onClick={onClose}><article className="flight-view-card" onClick={(event) => event.stopPropagation()}><button className="flight-view-close" onClick={onClose}>Close</button><span className="flight-vendor-icon"><Plane size={28} /></span><h2>{flight.flightName || flight.airlineName}</h2><p>{flight.airlineName} - {flight.flightNumber}</p><div><span><small>Route</small><strong>{flight.fromCode || flight.fromCity} to {flight.toCode || flight.toCity}</strong></span><span><small>Departure</small><strong>{flight.departureDate} {flight.departureTime}</strong></span><span><small>Arrival</small><strong>{flight.arrivalDate} {flight.arrivalTime}</strong></span><span><small>Seat Mode</small><strong>{flight.seatSelectionMode || "CHECK_IN"}</strong></span></div></article></div>;
 }
 
 function FlightForm({ editFlight, reload, navigate }) {
@@ -176,17 +228,19 @@ function FlightForm({ editFlight, reload, navigate }) {
   };
 
   const groups = [
-    ["Airline Info", ["airlineName", "airlineLogo", "flightNumber", "aircraftType", "cabinClass"]],
+    ["Airline Info", ["flightName", "flightNumber", "airlineName", "airlineLogo", "aircraftType", "cabinClass"]],
     ["Route Info", ["fromCity", "fromAirport", "fromCode", "toCity", "toAirport", "toCode"]],
     ["Schedule Info", ["departureDate", "departureTime", "arrivalDate", "arrivalTime", "duration", "stops"]],
     ["Pricing Info", ["baseFare", "taxes", "platformFee", "ticketPrice"]],
-    ["Seat Info", ["totalSeats"]],
+    ["Seat Info", ["totalSeats", "seatSelectionMode", "checkInOpenHoursBefore"]],
     ["Rules", ["baggageAllowance", "refundPolicy", "cancellationPolicy", "status"]],
   ];
 
   return (
-    <section className="vendor-panel vendor-page-panel">
-      <PanelTitle title={editFlight ? "Edit Flight" : "Add Flight"} right="Flight" />
+    <div className="flight-form-page">
+      <section className="flight-vendor-hero flight-form-hero"><div className="flight-vendor-hero-left"><span className="flight-vendor-icon"><Plane size={30} /></span><div><h1>{editFlight ? "Edit Flight" : "Add Flight"}</h1><p>Configure airline, route, schedule, pricing, seats, and check-in rules.</p></div></div></section>
+      <section className="vendor-panel vendor-page-panel">
+      <PanelTitle title="Flight Information" right={editFlight ? "Edit" : "New"} />
       <form className="flight-form" onSubmit={submit}>
         {groups.map(([title, fields]) => (
           <fieldset key={title}>
@@ -198,15 +252,20 @@ function FlightForm({ editFlight, reload, navigate }) {
         ))}
         <button className="flight-primary-btn" type="submit"><Plus size={17} /> {editFlight ? "Update Flight" : "Add Flight"}</button>
       </form>
-    </section>
+      </section>
+    </div>
   );
 }
 
 function FlightField({ field, value, update }) {
   const fieldLabels = {
+    flightName: "Flight Name",
     airlineLogo: "Airline Logo URL",
+    fromCity: "From",
+    toCity: "To",
     fromCode: "From Airport Code",
     toCode: "To Airport Code",
+    ticketPrice: "Price",
   };
   const labels = fieldLabels[field] || field.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase());
   const options = {
@@ -214,8 +273,9 @@ function FlightField({ field, value, update }) {
     cabinClass: ["Economy", "Business", "First Class"],
     status: ["active", "inactive"],
     stops: ["Non-stop", "1 Stop", "2 Stops"],
+    seatSelectionMode: ["DURING_BOOKING", "AFTER_BOOKING", "CHECK_IN", "AUTO_ASSIGN"],
   };
-  const numberFields = ["baseFare", "taxes", "platformFee", "ticketPrice", "totalSeats", "availableSeats", "bookedSeats", "blockedSeats"];
+  const numberFields = ["baseFare", "taxes", "platformFee", "ticketPrice", "totalSeats", "availableSeats", "bookedSeats", "blockedSeats", "checkInOpenHoursBefore"];
   const dateFields = ["departureDate", "arrivalDate"];
   const timeFields = ["departureTime", "arrivalTime"];
   if (options[field]) {
@@ -225,38 +285,41 @@ function FlightField({ field, value, update }) {
 }
 
 function MyFlights({ flights, reload, navigate }) {
+  const [viewingFlight, setViewingFlight] = useState(null);
   const deleteFlight = async (flight) => {
     if (!window.confirm(`Delete ${flight.flightNumber}?`)) return;
     await axios.delete(`${apiBase}/vendor/flights/${flight._id}`, auth());
     reload();
   };
   return (
+    <>
     <DataTable
       title="My Flights"
-      columns={["Airline Logo", "Airline Name", "Flight Number", "Route", "Aircraft Type", "Departure Date", "Departure Time", "Arrival Time", "Ticket Price", "Total Seats", "Available Seats", "Booked Seats", "Blocked Seats", "Status", "Actions"]}
+      columns={["Flight Name", "Flight Number", "From", "To", "Departure Time", "Arrival Time", "Price", "Total Seats", "Booked Seats", "Available Seats", "Status", "Actions"]}
       rows={flights.map((flight) => [
-        flight.airlineLogo ? <img className="flight-logo" src={flight.airlineLogo} alt={flight.airlineName} /> : "-",
-        flight.airlineName,
+        flight.flightName || flight.airlineName,
         flight.flightNumber,
-        `${flight.fromCode || flight.fromCity} to ${flight.toCode || flight.toCity}`,
-        flight.aircraftType,
-        flight.departureDate || "-",
+        flight.fromCode || flight.fromCity,
+        flight.toCode || flight.toCity,
         flight.departureTime || "-",
         flight.arrivalTime || "-",
         `Rs ${flight.ticketPrice || 0}`,
         flight.totalSeats || 0,
-        flight.availableSeats || 0,
         flight.bookedSeats || 0,
-        flight.blockedSeats || 0,
+        Math.max(flightNumber(flight.totalSeats) - flightNumber(flight.bookedSeats), 0),
         <span className="vendor-status">{flight.status}</span>,
-        <div className="vendor-row-actions"><button onClick={() => navigate(`/vendor/edit-flight/${flight._id}`)}>Edit</button><button onClick={() => deleteFlight(flight)}>Delete</button><button onClick={() => navigate("/vendor/flight-seat-management", { state: { flightId: flight._id } })}>Manage Seats</button></div>,
+        <div className="vendor-row-actions"><button onClick={() => setViewingFlight(flight)}>View</button><button onClick={() => navigate(`/vendor/edit-flight/${flight._id}`)}>Edit</button><button onClick={() => deleteFlight(flight)}>Delete</button><button onClick={() => navigate("/vendor/flight-seat-management", { state: { flightId: flight._id } })}>Manage Seats</button><button onClick={() => navigate("/vendor/flight-bookings")}>Bookings</button></div>,
       ])}
     />
+    <FlightViewModal flight={viewingFlight} onClose={() => setViewingFlight(null)} />
+    </>
   );
 }
 
 function FlightSeatManagement({ flights }) {
-  const [flightId, setFlightId] = useState(flights[0]?._id || "");
+  const location = useLocation();
+  const requestedFlightId = location.state?.flightId || "";
+  const [flightId, setFlightId] = useState(requestedFlightId || flights[0]?._id || "");
   const [seats, setSeats] = useState([]);
   const [selectedSeat, setSelectedSeat] = useState(null);
   const flight = flights.find((item) => item._id === flightId) || flights[0];
@@ -272,19 +335,23 @@ function FlightSeatManagement({ flights }) {
   const rowNumbers = Object.keys(seatsByRow).sort((a, b) => Number(a) - Number(b));
 
   useEffect(() => {
+    if (requestedFlightId && flights.some((item) => item._id === requestedFlightId)) {
+      setFlightId(requestedFlightId);
+      return;
+    }
     if (!flightId && flights[0]?._id) setFlightId(flights[0]._id);
-  }, [flightId, flights]);
+  }, [flightId, flights, requestedFlightId]);
 
-  const loadSeats = async (id = flightId) => {
+  const loadSeats = useCallback(async (id = flightId) => {
     if (!id) return;
     const res = await axios.get(`${apiBase}/vendor/flights/${id}/seats`, auth());
     setSeats(res.data.seats || []);
     setSelectedSeat(null);
-  };
+  }, [flightId]);
 
   useEffect(() => {
     if (flightId) loadSeats(flightId);
-  }, [flightId]);
+  }, [flightId, loadSeats]);
 
   const seatAction = async (action) => {
     if (!selectedSeat) return;
@@ -379,10 +446,6 @@ function PanelTitle({ title, right = "Flight" }) {
 
 function SeatLegend() {
   return <div className="seat-legend"><span className="available">Available</span><span className="booked">Booked</span><span className="blocked">Blocked</span><span className="selected">Selected</span></div>;
-}
-
-function MiniBars({ values }) {
-  return <div className="flight-mini-bars">{values.map((value, index) => <i key={`${value}-${index}`} style={{ height: `${value}%` }} />)}</div>;
 }
 
 export default FlightModule;

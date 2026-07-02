@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import axios from "axios";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -197,6 +197,10 @@ function Field({ field, value, onChange }) {
           onChange={(event) => onChange(event.target.value)}
           required={field.required !== false}
         />
+      ) : field.type === "select" ? (
+        <select value={value || ""} onChange={(event) => onChange(event.target.value)} required={field.required !== false}>
+          {field.options.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
+        </select>
       ) : (
         <input
           type={field.type || "text"}

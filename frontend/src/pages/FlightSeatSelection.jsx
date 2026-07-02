@@ -60,7 +60,17 @@ function FlightSeatSelection() {
   }
 
   const layout = getLayout(flight?.aircraftType || flight?.aircraft || "");
-  const reservedSeats = new Set(flight.reservedSeats || []);
+  const actualSeats = Array.isArray(flight.seats) ? flight.seats : [];
+  const configuredSeatCount = Number(flight.totalSeats || 0);
+  const generatedSeats = Array.from({ length: configuredSeatCount }, (_, index) => {
+    const row = Math.floor(index / layout.columns.length) + 1;
+    return `${layout.columns[index % layout.columns.length]}${row}`;
+  });
+  const validSeats = new Set(actualSeats.length ? actualSeats.map((seat) => seat.seatNumber) : generatedSeats);
+  const reservedSeats = new Set([
+    ...(flight.reservedSeats || []).map((seat) => String(seat).replace(/^(\d+)([A-Z])$/, "$2$1")),
+    ...actualSeats.filter((seat) => seat.status !== "available").map((seat) => seat.seatNumber),
+  ]);
 
   const seatFee =
     cabinClass === "Business Class"
@@ -114,7 +124,9 @@ function FlightSeatSelection() {
       return (
         <div className="seat-group" key={`${row}-${groupIndex}`}>
           {groupColumns.map((column) => {
-            const seatId = `${row}${column}`;
+            const seatId = `${column}${row}`;
+            const exists = (!actualSeats.length && !configuredSeatCount) || validSeats.has(seatId);
+            if (!exists) return null;
             const reserved = reservedSeats.has(seatId);
             const selected = selectedSeats.includes(seatId);
             const seatKind = getSeatType(layout.columns, column);

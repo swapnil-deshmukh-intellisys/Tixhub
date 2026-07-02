@@ -1,5 +1,6 @@
 const Booking = require("../models/Booking");
 const Flight = require("../models/Flight");
+const { emitVendorUpdated } = require("../socket");
 
 const makeBookingCode = () => `TH${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 const makePnr = () => `PNR${Date.now().toString(36).toUpperCase().slice(-6)}${Math.random().toString(36).slice(2, 4).toUpperCase()}`;
@@ -7,6 +8,21 @@ const makePnr = () => `PNR${Date.now().toString(36).toUpperCase().slice(-6)}${Ma
 const toBool = (value) => value === true || value === "true" || value === "yes" || value === 1 || value === "1";
 const number = (value, fallback = 0) => Number(value === undefined || value === null || value === "" ? fallback : value);
 const airportCode = (value) => String(value || "AIR").trim().slice(0, 3).toUpperCase();
+const seatSelectionModes = ["DURING_BOOKING", "AFTER_BOOKING", "CHECK_IN", "AUTO_ASSIGN"];
+let seatMutationQueue = Promise.resolve();
+
+// Seat claims are serialized so payment and manage-booking requests cannot take the same seat.
+const withSeatMutationLock = async (task) => {
+  const previous = seatMutationQueue;
+  let release;
+  seatMutationQueue = new Promise((resolve) => { release = resolve; });
+  await previous;
+  try {
+    return await task();
+  } finally {
+    release();
+  }
+};
 
 const columnsByAircraft = {
   A320: [["A", "B", "C"], ["D", "E", "F"]],
@@ -44,6 +60,7 @@ const normalizeFlightPayload = (body, user) => {
     vendorId: body.vendor_id ?? body.vendorId ?? body.vendor ?? user?.id,
     vendor: body.vendor_id ?? body.vendorId ?? body.vendor ?? user?.id,
     airlineName: body.airline_name ?? body.airlineName ?? body.airline ?? "",
+    flightName: body.flight_name ?? body.flightName ?? body.airline_name ?? body.airlineName ?? body.airline ?? "",
     airlineLogo: body.airline_logo ?? body.airlineLogo ?? body.airlineLogoUrl ?? "",
     flightNumber: body.flight_number ?? body.flightNumber ?? "",
     flightType: body.flight_type ?? body.flightType ?? "domestic",
@@ -76,6 +93,8 @@ const normalizeFlightPayload = (body, user) => {
     mealIncluded: toBool(body.meal_included ?? body.mealIncluded),
     status: body.status || "active",
     seats: buildSeats(totalSeats, aircraft, body.seats),
+    seatSelectionMode: seatSelectionModes.includes(body.seatSelectionMode) ? body.seatSelectionMode : "CHECK_IN",
+    checkInOpenHoursBefore: Math.max(0, number(body.checkInOpenHoursBefore, 24)),
   };
 };
 
@@ -86,6 +105,7 @@ const mapFlight = (flight) => ({
   airlineLogoUrl: flight.airlineLogo || "",
   airline: flight.airlineName,
   airlineName: flight.airlineName,
+  flightName: flight.flightName || flight.airlineName,
   flightNumber: flight.flightNumber,
   flightType: flight.flightType || "domestic",
   from: flight.fromCity,
@@ -121,6 +141,8 @@ const mapFlight = (flight) => ({
   status: flight.status,
   seats: flight.seats || [],
   reservedSeats: (flight.seats || []).filter((seat) => seat.status !== "available").map((seat) => seat.seatNumber),
+  seatSelectionMode: flight.seatSelectionMode || "CHECK_IN",
+  checkInOpenHoursBefore: Number(flight.checkInOpenHoursBefore ?? 24),
 });
 
 const createFlight = async (req, res) => {
@@ -159,7 +181,7 @@ const deleteFlight = async (req, res) => {
   res.json({ message: "Flight deleted" });
 };
 
-const createFlightBooking = async (req, res) => {
+const createFlightBooking = async (req, res) => withSeatMutationLock(async () => {
   const flightId = req.body.flight_id || req.body.flightId || req.body.details?.flightId || req.body.details?.flight?._id || req.body.details?.flight?.id;
   const flight = flightId ? await Flight.findById(flightId) : null;
   const flightDetails = req.body.details?.flight || {};
@@ -171,7 +193,14 @@ const createFlightBooking = async (req, res) => {
       .split(",")
       .map((seat) => seat.trim())
       .filter(Boolean);
-  if (!seats.length) return res.status(400).json({ message: "Seat number is required" });
+  const seatSelectionMode = flight?.seatSelectionMode || flightDetails.seatSelectionMode || "CHECK_IN";
+  const assignedSeats = seatSelectionMode === "DURING_BOOKING" ? seats : [];
+  if (seatSelectionMode === "DURING_BOOKING" && !assignedSeats.length) {
+    return res.status(400).json({ message: "Seat selection is required for this flight" });
+  }
+  if (new Set(assignedSeats).size !== assignedSeats.length) {
+    return res.status(400).json({ message: "Duplicate seat numbers are not allowed" });
+  }
 
   const passenger = {
     name: req.body.passenger_name || req.body.passengerName || req.body.details?.passenger?.name || req.user.name || "",
@@ -183,15 +212,23 @@ const createFlightBooking = async (req, res) => {
   }
 
   const pnr = makePnr();
+  if (!flight && assignedSeats.length) {
+    const validSeats = new Set(buildSeats(Number(flightDetails.totalSeats || 180), flightDetails.aircraftType || flightDetails.aircraft || "A320").map((seat) => seat.seatNumber));
+    const reserved = new Set((flightDetails.reservedSeats || []).map((seat) => String(seat).replace(/^(\d+)([A-Z])$/, "$2$1")));
+    const related = await Booking.find({ module: "flight", flightId });
+    related.flatMap((booking) => booking.seats || []).forEach((seat) => reserved.add(seat));
+    const unavailable = assignedSeats.filter((seat) => !validSeats.has(seat) || reserved.has(seat));
+    if (unavailable.length) return res.status(409).json({ message: `Seats unavailable: ${unavailable.join(", ")}` });
+  }
   if (flight) {
     const seatMap = new Map((flight.seats || []).map((seat) => [seat.seatNumber, seat]));
-    const unavailable = seats.filter((seatNumber) => {
+    const unavailable = assignedSeats.filter((seatNumber) => {
       const seat = seatMap.get(seatNumber);
-      return seat && seat.status !== "available";
+      return !seat || seat.status !== "available";
     });
     if (unavailable.length) return res.status(409).json({ message: `Seats unavailable: ${unavailable.join(", ")}` });
 
-    seats.forEach((seatNumber) => {
+    assignedSeats.forEach((seatNumber) => {
       const seat = seatMap.get(seatNumber);
       if (!seat) return;
       seat.status = "booked";
@@ -200,8 +237,8 @@ const createFlightBooking = async (req, res) => {
       seat.email = passenger.email;
       seat.pnr = pnr;
       seat.amount = number(req.body.total_amount ?? req.body.totalAmount ?? req.body.amount);
-      seat.paymentStatus = req.body.payment_status || req.body.paymentStatus || "paid";
-      seat.bookingStatus = req.body.booking_status || req.body.bookingStatus || "confirmed";
+      seat.paymentStatus = "PAID";
+      seat.bookingStatus = "CONFIRMED";
       seat.bookingDate = new Date();
     });
     flight.bookedSeats = flight.seats.filter((seat) => seat.status === "booked").length;
@@ -223,11 +260,17 @@ const createFlightBooking = async (req, res) => {
     customerName: passenger.name,
     customerEmail: passenger.email,
     customerMobile: passenger.mobile,
-    seats,
+    seats: assignedSeats,
+    seatNumber: assignedSeats[0] || null,
     amount,
     bookingCode: makeBookingCode(),
-    status: req.body.booking_status || req.body.bookingStatus || "confirmed",
-    paymentStatus: req.body.payment_status || req.body.paymentStatus || "paid",
+    status: "confirmed",
+    bookingStatus: "CONFIRMED",
+    paymentStatus: "PAID",
+    pnr,
+    checkInStatus: "NOT_CHECKED_IN",
+    boardingPassGenerated: false,
+    qrData: null,
     details: {
       ...(req.body.details || {}),
       pnr,
@@ -235,11 +278,232 @@ const createFlightBooking = async (req, res) => {
       passenger,
       flight: flightDetails,
       cabinClass: req.body.class_type || req.body.classType || req.body.details?.cabinClass || flight?.cabinClass || flight?.classType,
-      seats,
+      seats: assignedSeats,
+      seatSelectionMode,
+      checkInOpenHoursBefore: Number(flight?.checkInOpenHoursBefore ?? flightDetails.checkInOpenHoursBefore ?? 24),
+      bookingStatus: "CONFIRMED",
+      paymentStatus: "PAID",
+      checkInStatus: "NOT_CHECKED_IN",
     },
   });
 
+  if (booking.vendorId || booking.vendor) {
+    emitVendorUpdated(booking.vendorId || booking.vendor, "newBooking", { booking });
+  }
+
   res.status(201).json({ message: "Flight booking confirmed", booking, pnr });
+});
+
+const getOwnedFlightBooking = async (bookingId, userId) => {
+  const booking = await Booking.findOne({ _id: bookingId, user: userId, module: "flight" });
+  if (!booking) return { error: "Flight booking not found" };
+
+  const flightId = booking.flightId || booking.details?.flightId || booking.details?.flight?._id || booking.details?.flight?.id;
+  let flight = flightId ? await Flight.findById(flightId) : null;
+
+  // Demo/search flights are snapshots rather than Flight rows; rebuild their seat inventory safely.
+  if (!flight && booking.details?.flight) {
+    const snapshot = booking.details.flight;
+    const aircraft = snapshot.aircraftType || snapshot.aircraft || "A320";
+    const reserved = new Set((snapshot.reservedSeats || []).map((seat) => String(seat).replace(/^(\d+)([A-Z])$/, "$2$1")));
+    const seats = buildSeats(Number(snapshot.totalSeats || 180), aircraft)
+      .map((seat) => ({ ...seat, status: reserved.has(seat.seatNumber) ? "booked" : "available" }));
+    const related = await Booking.find({ module: "flight", flightId });
+    const assigned = new Set(related.flatMap((item) => item.seats || []));
+    seats.forEach((seat) => { if (assigned.has(seat.seatNumber)) seat.status = "booked"; });
+    flight = {
+      ...snapshot,
+      _id: flightId,
+      airlineName: snapshot.airlineName || snapshot.airline,
+      fromCity: snapshot.fromCity || snapshot.from,
+      toCity: snapshot.toCity || snapshot.to,
+      aircraftType: aircraft,
+      seatSelectionMode: snapshot.seatSelectionMode || booking.details?.seatSelectionMode || "CHECK_IN",
+      totalSeats: seats.length,
+      availableSeats: seats.filter((seat) => seat.status === "available").length,
+      seats,
+    };
+  }
+
+  if (!flight) return { error: "Flight is no longer available" };
+  return { booking, flight };
+};
+
+const getAvailableFlightSeats = async (req, res) => {
+  const result = await getOwnedFlightBooking(req.params.id, req.user.id);
+  if (result.error) return res.status(404).json({ message: result.error });
+  const { booking, flight } = result;
+  return res.json({
+    booking: {
+      _id: booking._id,
+      title: booking.title,
+      pnr: booking.pnr || booking.details?.pnr,
+      seatNumber: booking.seatNumber || booking.seats?.[0] || null,
+      bookingStatus: booking.bookingStatus,
+      seatSelectionMode: flight.seatSelectionMode || "CHECK_IN",
+    },
+    flight: mapFlight(flight),
+    seats: (flight.seats || []).map((seat) => ({ seatNumber: seat.seatNumber, status: seat.status })),
+  });
+};
+
+const getCheckInWindow = (flight) => {
+  const hoursBefore = Number(flight.checkInOpenHoursBefore ?? 24);
+  const departure = new Date(`${flight.departureDate || ""}T${flight.departureTime || "00:00"}:00`);
+  if (Number.isNaN(departure.getTime())) {
+    return { isCheckInOpen: false, checkInOpenHoursBefore: hoursBefore, checkInOpensAt: null, departureAt: null };
+  }
+  const opensAt = new Date(departure.getTime() - hoursBefore * 60 * 60 * 1000);
+  const now = new Date();
+  return {
+    isCheckInOpen: now >= opensAt && now < departure,
+    checkInOpenHoursBefore: hoursBefore,
+    checkInOpensAt: opensAt.toISOString(),
+    departureAt: departure.toISOString(),
+  };
+};
+
+const flightBookingResponse = (booking, flight) => ({
+  ...booking.toObject(),
+  pnr: booking.pnr || booking.details?.pnr,
+  seatNumber: booking.seatNumber || booking.seats?.[0] || null,
+  checkInStatus: booking.checkInStatus || "NOT_CHECKED_IN",
+  boardingPassGenerated: Boolean(booking.boardingPassGenerated),
+  qrData: booking.qrData || null,
+  flight: mapFlight(flight),
+  ...getCheckInWindow(flight),
+});
+
+const getFlightBooking = async (req, res) => {
+  const result = await getOwnedFlightBooking(req.params.id, req.user.id);
+  if (result.error) return res.status(404).json({ message: result.error });
+  return res.json(flightBookingResponse(result.booking, result.flight));
+};
+
+const selectFlightSeat = async (req, res) => withSeatMutationLock(async () => {
+  const result = await getOwnedFlightBooking(req.params.id, req.user.id);
+  if (result.error) return res.status(404).json({ message: result.error });
+  const { booking, flight } = result;
+  if ((flight.seatSelectionMode || "CHECK_IN") !== "AFTER_BOOKING") {
+    return res.status(400).json({ message: "Manual seat selection is not available for this flight" });
+  }
+  if (String(booking.bookingStatus || booking.status).toUpperCase() !== "CONFIRMED") {
+    return res.status(400).json({ message: "Only confirmed bookings can select a seat" });
+  }
+  if (booking.seatNumber || booking.seats?.length) {
+    return res.status(409).json({ message: "A seat is already assigned to this booking" });
+  }
+
+  const seatNumber = String(req.body.seatNumber || "").trim().toUpperCase();
+  const seat = (flight.seats || []).find((item) => item.seatNumber === seatNumber);
+  if (!seat) return res.status(404).json({ message: "Seat does not exist on this flight" });
+  if (seat.status !== "available") return res.status(409).json({ message: "Seat is no longer available" });
+
+  seat.status = "booked";
+  seat.bookingId = booking._id;
+  seat.passengerName = booking.details?.passenger?.name || booking.customerName || "Passenger";
+  seat.pnr = booking.pnr || booking.details?.pnr || "";
+  flight.bookedSeats = flight.seats.filter((item) => item.status === "booked").length;
+  flight.blockedSeats = flight.seats.filter((item) => item.status === "blocked").length;
+  flight.availableSeats = Math.max(Number(flight.totalSeats || flight.seats.length) - flight.bookedSeats - flight.blockedSeats, 0);
+
+  booking.seatNumber = seatNumber;
+  booking.seats = [seatNumber];
+  booking.details = { ...booking.details, seats: [seatNumber] };
+  booking.markModified?.("details");
+  await flight.save?.();
+  await booking.save();
+
+  return res.json({
+    message: "Seat assigned",
+    booking: { ...booking.toObject(), seatNumber, qrData: null, boardingPassGenerated: false },
+  });
+});
+
+const checkInFlight = async (req, res) => withSeatMutationLock(async () => {
+  const result = await getOwnedFlightBooking(req.params.id, req.user.id);
+  if (result.error) return res.status(404).json({ message: result.error });
+  const { booking, flight } = result;
+  if (booking.checkInStatus === "CHECKED_IN") {
+    return res.status(409).json({ message: "Passenger is already checked in" });
+  }
+  if (String(booking.bookingStatus || booking.status).toUpperCase() !== "CONFIRMED" || String(booking.paymentStatus).toUpperCase() !== "PAID") {
+    return res.status(400).json({ message: "Only confirmed, paid flight bookings can check in" });
+  }
+
+  const window = getCheckInWindow(flight);
+  if (!window.isCheckInOpen) {
+    return res.status(400).json({ message: `Check-in opens ${window.checkInOpenHoursBefore} hours before departure.`, ...window });
+  }
+
+  const mode = flight.seatSelectionMode || booking.details?.seatSelectionMode || "CHECK_IN";
+  let seatNumber = booking.seatNumber || booking.seats?.[0] || null;
+  if (!seatNumber && mode === "AUTO_ASSIGN") {
+    seatNumber = (flight.seats || []).find((seat) => seat.status === "available")?.seatNumber || null;
+  } else if (!seatNumber) {
+    seatNumber = String(req.body.seatNumber || "").trim().toUpperCase() || null;
+  }
+  if (!seatNumber) return res.status(409).json({ message: "Select an available seat before completing check-in" });
+
+  if (!booking.seatNumber && !booking.seats?.length) {
+    const seat = (flight.seats || []).find((item) => item.seatNumber === seatNumber);
+    if (!seat) return res.status(404).json({ message: "Seat does not exist on this flight" });
+    if (seat.status !== "available") return res.status(409).json({ message: "Seat is no longer available" });
+    seat.status = "booked";
+    seat.bookingId = booking._id;
+    seat.passengerName = booking.details?.passenger?.name || booking.customerName || "Passenger";
+    seat.pnr = booking.pnr || booking.details?.pnr || "";
+    flight.bookedSeats = flight.seats.filter((item) => item.status === "booked").length;
+    flight.blockedSeats = flight.seats.filter((item) => item.status === "blocked").length;
+    flight.availableSeats = Math.max(Number(flight.totalSeats || flight.seats.length) - flight.bookedSeats - flight.blockedSeats, 0);
+    await flight.save?.();
+  }
+
+  const frontendOrigin = req.get("origin") || "http://localhost:5173";
+  const qrData = `${frontendOrigin}/verify/boarding-pass/${encodeURIComponent(booking._id)}`;
+  booking.seatNumber = seatNumber;
+  booking.seats = [seatNumber];
+  booking.checkInStatus = "CHECKED_IN";
+  booking.checkedIn = true;
+  booking.checkedInAt = new Date();
+  booking.boardingPassGenerated = true;
+  booking.qrData = qrData;
+  booking.details = { ...booking.details, seats: [seatNumber], checkInStatus: "CHECKED_IN" };
+  booking.markModified?.("details");
+  await booking.save();
+
+  return res.json({ message: "Check-in complete", boardingPass: flightBookingResponse(booking, flight) });
+});
+
+const verifyBoardingPass = async (req, res) => {
+  const booking = await Booking.findById(req.params.bookingId);
+  if (!booking) return res.status(404).json({ valid: false, message: "Invalid boarding pass: booking not found" });
+  if (booking.module !== "flight") return res.status(400).json({ valid: false, message: "Invalid boarding pass: booking is not a flight" });
+  if (booking.checkInStatus !== "CHECKED_IN") return res.status(400).json({ valid: false, message: "Invalid boarding pass: passenger is not checked in" });
+  if (!booking.boardingPassGenerated) return res.status(400).json({ valid: false, message: "Invalid boarding pass: boarding pass was not generated" });
+  const seatNumber = booking.seatNumber || booking.seats?.[0] || null;
+  if (!seatNumber) return res.status(400).json({ valid: false, message: "Invalid boarding pass: seat is not assigned" });
+  if (!booking.qrData) return res.status(400).json({ valid: false, message: "Invalid boarding pass: QR verification data is missing" });
+  const flight = await Flight.findById(booking.flightId || booking.details?.flightId);
+  const snapshot = flight || booking.details?.flight || {};
+  return res.json({
+    valid: true,
+    message: "Boarding pass verified",
+    boardingPass: {
+      bookingId: booking._id,
+      passengerName: booking.details?.passenger?.name || booking.customerName || "Passenger",
+      pnr: booking.pnr || booking.details?.pnr,
+      flightNumber: snapshot.flightNumber || "",
+      airline: snapshot.airlineName || snapshot.airline || "",
+      source: snapshot.fromCode || snapshot.fromCity || snapshot.from || "",
+      destination: snapshot.toCode || snapshot.toCity || snapshot.to || "",
+      departureDate: snapshot.departureDate || "",
+      departureTime: snapshot.departureTime || "",
+      seatNumber,
+      checkInStatus: booking.checkInStatus,
+      boardingPassGenerated: Boolean(booking.boardingPassGenerated),
+    },
+  });
 };
 
 const getFlightBookings = async (req, res) => {
@@ -261,5 +525,10 @@ module.exports = {
   deleteFlight,
   createFlightBooking,
   getFlightBookings,
+  getAvailableFlightSeats,
+  getFlightBooking,
+  selectFlightSeat,
+  checkInFlight,
+  verifyBoardingPass,
   mapFlight,
 };

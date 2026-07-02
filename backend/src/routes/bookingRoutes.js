@@ -10,6 +10,7 @@ const WalletTransaction = require("../models/WalletTransaction");
 const { requireAuth } = require("../middleware/authMiddleware");
 const VendorNotification = require("../models/VendorNotification");
 const { emitVendorUpdated } = require("../socket");
+const { createFlightBooking } = require("../controllers/flightController");
 const {
   makeShowId,
   markMovieSeatsBooked,
@@ -255,60 +256,7 @@ router.post(["/bookings/movie", "/bookings/book-seat"], async (req, res) => {
   res.status(201).json({ message: "Movie booking confirmed", booking: withQrAliases(booking) });
 });
 
-router.post("/bookings/flight", async (req, res) => {
-  req.body.module = "flight";
-  req.body.title = req.body.title || `${req.body.details?.flight?.airline || "Flight"} ${req.body.details?.flight?.flightNumber || ""}`;
-  req.body.amount = req.body.amount ?? req.body.totalAmount ?? 0;
-  const flightId = req.body.flightId || req.body.details?.flightId || req.body.details?.flight?._id || req.body.details?.flight?.id;
-  const seats = Array.isArray(req.body.seats) ? req.body.seats : [];
-  const vendorId = await resolveVendorId("flight", req.body);
-  const pnr = `PNR${Date.now().toString(36).toUpperCase().slice(-6)}`;
-  const passenger = req.body.details?.passenger || {};
-
-  if (flightId) {
-    const flight = await Flight.findById(flightId);
-    if (flight) {
-      const seatMap = new Map((flight.seats || []).map((seat) => [seat.seatNumber, seat]));
-      const alreadyUnavailable = seats.filter((seatNumber) => {
-        const seat = seatMap.get(seatNumber);
-        return seat && seat.status !== "available";
-      });
-      if (alreadyUnavailable.length) {
-        return res.status(409).json({ message: `Seats unavailable: ${alreadyUnavailable.join(", ")}` });
-      }
-      seats.forEach((seatNumber) => {
-        const seat = seatMap.get(seatNumber);
-        if (!seat) return;
-        seat.status = "booked";
-        seat.passengerName = passenger.name || req.user.name || "Passenger";
-        seat.pnr = pnr;
-        seat.mobile = passenger.mobile || req.user.mobile || "";
-        seat.email = passenger.email || req.user.email || "";
-        seat.amount = req.body.amount;
-        seat.paymentStatus = "paid";
-        seat.bookingStatus = "confirmed";
-        seat.bookingDate = new Date();
-      });
-      flight.bookedSeats = flight.seats.filter((seat) => seat.status === "booked").length;
-      flight.blockedSeats = flight.seats.filter((seat) => seat.status === "blocked").length;
-      flight.availableSeats = Math.max(Number(flight.totalSeats || flight.seats.length) - flight.bookedSeats - flight.blockedSeats, 0);
-      await flight.save();
-    }
-  }
-
-  const booking = await Booking.create({
-    user: req.user.id,
-    vendor: vendorId,
-    vendorId,
-    module: "flight",
-    title: req.body.title,
-    details: { ...(req.body.details || req.body), pnr, flightId },
-    seats,
-    amount: req.body.amount,
-    bookingCode: makeBookingCode(),
-  });
-  res.status(201).json({ message: "Flight booking confirmed", booking, pnr });
-});
+router.post("/bookings/flight", createFlightBooking);
 
 router.get("/my-bookings", requireAuth, async (req, res) => {
   const bookings = await Booking.find({ user: req.user.id }).sort({ createdAt: -1 });

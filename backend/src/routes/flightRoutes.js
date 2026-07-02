@@ -8,6 +8,11 @@ const {
   deleteFlight,
   createFlightBooking,
   getFlightBookings,
+  getAvailableFlightSeats,
+  getFlightBooking,
+  selectFlightSeat,
+  checkInFlight,
+  verifyBoardingPass,
 } = require("../controllers/flightController");
 const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 
@@ -104,6 +109,7 @@ const mapVendorFlight = (listing) => {
     vendor: listing.vendor,
     airlineLogoUrl: details.airlineLogoUrl || "",
     airline: details.airlineName || listing.title,
+    flightName: details.flightName || details.airlineName || listing.title,
     flightNumber: details.flightNumber || "TIX-FLIGHT",
     from: details.fromCity || cityName(details.fromAirport),
     fromCode: details.fromAirportCode || airportCode(details.fromAirport),
@@ -133,6 +139,8 @@ const mapVendorFlight = (listing) => {
       .filter(Boolean),
     totalSeats: Number(details.totalSeats || details.availableSeats || listing.inventory || 0),
     availableSeats: Math.max(0, Number(details.totalSeats || details.availableSeats || listing.inventory || 0) - String(details.bookedSeats || "").split(",").filter(Boolean).length),
+    seatSelectionMode: details.seatSelectionMode || "CHECK_IN",
+    checkInOpenHoursBefore: Number(details.checkInOpenHoursBefore ?? 24),
   };
 };
 
@@ -143,6 +151,7 @@ const mapFlight = (flight) => ({
   vendor: flight.vendor || flight.vendorId,
   airlineLogoUrl: flight.airlineLogo || "",
   airline: flight.airlineName,
+  flightName: flight.flightName || flight.airlineName,
   flightNumber: flight.flightNumber,
   from: flight.fromCity || cityName(flight.fromAirport),
   fromCode: flight.fromCode || airportCode(flight.fromAirport),
@@ -170,6 +179,9 @@ const mapFlight = (flight) => ({
   reservedSeats: (flight.seats || []).filter((seat) => seat.status !== "available").map((seat) => seat.seatNumber),
   totalSeats: Number(flight.totalSeats || 0),
   availableSeats: Number(flight.availableSeats || 0),
+  seats: flight.seats || [],
+  seatSelectionMode: flight.seatSelectionMode || "CHECK_IN",
+  checkInOpenHoursBefore: Number(flight.checkInOpenHoursBefore ?? 24),
 });
 
 const getVendorFlights = async () => {
@@ -183,7 +195,11 @@ const getVendorFlights = async () => {
 router.get("/flights", async (req, res) => {
   const { from, to, departureDate, cabinClass } = req.query;
   const vendorFlights = await getVendorFlights();
-  const allFlights = [...vendorFlights, ...flights];
+  const allFlights = [...vendorFlights, ...flights].map((flight) => ({
+    ...flight,
+    seatSelectionMode: flight.seatSelectionMode || "CHECK_IN",
+    checkInOpenHoursBefore: Number(flight.checkInOpenHoursBefore ?? 24),
+  }));
 
   const results = allFlights.filter((flight) => (
     (matches(flight.from, from || "") || matches(flight.fromAirport, from || "")) &&
@@ -200,6 +216,11 @@ router.post("/flights", requireAuth, requireRole("admin", "vendor"), asyncHandle
 router.get("/flight-bookings", requireAuth, asyncHandler(getFlightBookings));
 
 router.post("/flight-bookings", requireAuth, asyncHandler(createFlightBooking));
+router.get("/flight-bookings/:id/seats", requireAuth, asyncHandler(getAvailableFlightSeats));
+router.patch("/flight-bookings/:id/seat", requireAuth, asyncHandler(selectFlightSeat));
+router.get("/flight-bookings/:id", requireAuth, asyncHandler(getFlightBooking));
+router.post("/flight-bookings/:id/check-in", requireAuth, asyncHandler(checkInFlight));
+router.get("/boarding-pass/verify/:bookingId", asyncHandler(verifyBoardingPass));
 
 router.get("/flights/offers", async (req, res) => {
   const vendorFlights = await getVendorFlights();
@@ -226,7 +247,7 @@ router.delete("/flights/:id", requireAuth, requireRole("admin", "vendor"), async
 
 router.get("/flights/:id", async (req, res) => {
   const flight = flights.find((item) => item.id === req.params.id);
-  if (flight) return res.json(flight);
+  if (flight) return res.json({ ...flight, seatSelectionMode: "CHECK_IN", checkInOpenHoursBefore: 24 });
 
   const modelFlight = await Flight.findOne({ _id: req.params.id, status: "active" });
   if (modelFlight) return res.json(mapFlight(modelFlight));

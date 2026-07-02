@@ -671,6 +671,7 @@ const getVendorReports = async (req, res) => {
 
 const flightSummaryFields = [
   "airlineName",
+  "flightName",
   "airlineLogo",
   "flightNumber",
   "aircraftType",
@@ -699,6 +700,8 @@ const flightSummaryFields = [
   "baggageAllowance",
   "refundPolicy",
   "cancellationPolicy",
+  "seatSelectionMode",
+  "checkInOpenHoursBefore",
 ];
 
 const getMovieBookingQuery = (req) => ({
@@ -1141,6 +1144,10 @@ const flightPayloadFromRequest = (body) => {
   payload.bookedSeats = numberValue(payload.bookedSeats);
   payload.blockedSeats = numberValue(payload.blockedSeats);
   payload.status = String(payload.status || "active").toLowerCase();
+  payload.seatSelectionMode = ["DURING_BOOKING", "AFTER_BOOKING", "CHECK_IN", "AUTO_ASSIGN"].includes(payload.seatSelectionMode)
+    ? payload.seatSelectionMode
+    : "CHECK_IN";
+  payload.checkInOpenHoursBefore = Math.max(0, numberValue(payload.checkInOpenHoursBefore ?? 24));
 
   if (!payload.totalSeats) {
     payload.totalSeats = buildFlightSeats(payload.aircraftType || "A320", payload.ticketPrice).length;

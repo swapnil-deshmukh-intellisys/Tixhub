@@ -154,6 +154,7 @@ const flightFromRow = (Model, row) =>
     vendorId: row.vendor_id || undefined,
     vendor: row.vendor_id || undefined,
     airlineName: row.airline_name,
+    flightName: row.flight_name || row.airline_name || "",
     airlineLogo: row.airline_logo || "",
     flightNumber: row.flight_number,
     flightType: row.flight_type || "domestic",
@@ -188,6 +189,8 @@ const flightFromRow = (Model, row) =>
     mealIncluded: Boolean(row.meal_included),
     status: row.status || "active",
     seats: parseJson(row.seats, []),
+    seatSelectionMode: row.seat_selection_mode || "CHECK_IN",
+    checkInOpenHoursBefore: Number(row.check_in_open_hours_before ?? 24),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
@@ -225,6 +228,11 @@ const bookingFromRow = (Model, row) =>
     checkedIn: Boolean(row.checked_in),
     checkedInAt: row.checked_in_at || null,
     scannedBy: row.scanned_by || "",
+    pnr: row.pnr || "",
+    seatNumber: row.seat_number || null,
+    checkInStatus: row.check_in_status || "NOT_CHECKED_IN",
+    boardingPassGenerated: Boolean(row.boarding_pass_generated),
+    qrData: row.qr_data || null,
     details: parseJson(row.details, {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -540,17 +548,19 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
 
           await pool.query(
             `INSERT INTO flights (
-              id, vendor_id, airline_name, airline_logo, flight_number, flight_type,
+              id, vendor_id, airline_name, flight_name, airline_logo, flight_number, flight_type,
               from_city, from_airport, from_code, to_city, to_airport, to_code,
               departure_date, departure_time, arrival_date, arrival_time, duration,
               aircraft, class_type, total_seats, available_seats, booked_seats, blocked_seats,
               base_fare, taxes, total_price, cabin_baggage, checkin_baggage,
-              refundable, meal_included, status, seats, created_at, updated_at
+              refundable, meal_included, status, seats, seat_selection_mode,
+              check_in_open_hours_before, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
               vendor_id = VALUES(vendor_id),
               airline_name = VALUES(airline_name),
+              flight_name = VALUES(flight_name),
               airline_logo = VALUES(airline_logo),
               flight_number = VALUES(flight_number),
               flight_type = VALUES(flight_type),
@@ -580,11 +590,14 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               meal_included = VALUES(meal_included),
               status = VALUES(status),
               seats = VALUES(seats),
+              seat_selection_mode = VALUES(seat_selection_mode),
+              check_in_open_hours_before = VALUES(check_in_open_hours_before),
               updated_at = VALUES(updated_at)`,
             [
               document._id,
               document.vendorId || document.vendor || null,
               document.airlineName || document.airline || "",
+              document.flightName || document.airlineName || document.airline || "",
               document.airlineLogo || document.airlineLogoUrl || "",
               document.flightNumber || "",
               document.flightType || "domestic",
@@ -614,6 +627,8 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               Boolean(document.mealIncluded),
               document.status || "active",
               JSON.stringify(document.seats || []),
+              document.seatSelectionMode || "CHECK_IN",
+              Number(document.checkInOpenHoursBefore ?? 24),
               document.createdAt,
               document.updatedAt,
             ]
@@ -634,9 +649,10 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               id, booking_id, booking_code, user_id, vendor_id, module, title, movie_id, theatre_id, screen_id, show_id, flight_id,
               customer_name, customer_email, customer_mobile, theatre, show_date, show_time,
               seats, seat_numbers, amount, total_amount, status, payment_status, booking_status,
-              qr_token, qr_code_url, checked_in, checked_in_at, scanned_by, details, created_at, updated_at
+              qr_token, qr_code_url, checked_in, checked_in_at, scanned_by, pnr, seat_number,
+              check_in_status, boarding_pass_generated, qr_data, details, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
               booking_id = VALUES(booking_id),
               vendor_id = VALUES(vendor_id),
@@ -664,6 +680,11 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               checked_in = VALUES(checked_in),
               checked_in_at = VALUES(checked_in_at),
               scanned_by = VALUES(scanned_by),
+              pnr = VALUES(pnr),
+              seat_number = VALUES(seat_number),
+              check_in_status = VALUES(check_in_status),
+              boarding_pass_generated = VALUES(boarding_pass_generated),
+              qr_data = VALUES(qr_data),
               details = VALUES(details),
               updated_at = VALUES(updated_at)`,
             [
@@ -697,6 +718,11 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               Boolean(document.checkedIn),
               document.checkedInAt || null,
               document.scannedBy || null,
+              document.pnr || details.pnr || null,
+              document.seatNumber || (document.seats || [])[0] || null,
+              document.checkInStatus || "NOT_CHECKED_IN",
+              Boolean(document.boardingPassGenerated),
+              document.qrData || null,
               JSON.stringify(details),
               document.createdAt,
               document.updatedAt,
@@ -732,7 +758,7 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
                 passenger.name || document.customerName || "",
                 passenger.mobile || document.customerMobile || "",
                 passenger.email || document.customerEmail || "",
-                (document.seats || details.seats || []).join(", "),
+                (document.seats || details.seats || []).join(", ") || null,
                 document.classType || details.cabinClass || details.classType || "Economy",
                 Number(document.amount || 0),
                 document.status || "confirmed",
