@@ -24,7 +24,7 @@ function FlightCheckIn() {
   const booking = data?.booking;
   const mode = booking?.seatSelectionMode || "CHECK_IN";
   const existingSeat = booking?.seatNumber;
-  const requiresSelection = !existingSeat && mode !== "AUTO_ASSIGN";
+  const requiresSelection = !existingSeat;
 
   const completeCheckIn = async () => {
     setSaving(true);
@@ -45,7 +45,6 @@ function FlightCheckIn() {
       <button className="flight-manage-back" onClick={() => navigate(-1)}><FaArrowLeft /> Back</button>
       <header><FaPlane /><div><h1>Flight Check-in</h1><p>{booking?.title || "Flight booking"} · PNR {booking?.pnr || "-"}</p></div></header>
       {existingSeat && <div className="flight-checkin-notice">Your assigned seat is <strong>{existingSeat}</strong>. Continue to complete check-in.</div>}
-      {!existingSeat && mode === "AUTO_ASSIGN" && <div className="flight-checkin-notice">The first available seat will be assigned automatically.</div>}
       {data && requiresSelection && <div className="flight-manage-seat-grid">{data.seats.map((seat) => {
         const booked = seat.status !== "available";
         return <button key={seat.seatNumber} disabled={booked} className={`${booked ? "booked" : "available"} ${selectedSeat === seat.seatNumber ? "selected" : ""}`} onClick={() => setSelectedSeat(seat.seatNumber)}><FaUser /><span>{seat.seatNumber}</span></button>;

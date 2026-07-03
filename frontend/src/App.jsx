@@ -18,10 +18,6 @@ import FlightSeatSelection from "./pages/FlightSeatSelection";
 import FlightReviewBooking from "./pages/FlightReviewBooking";
 import FlightPayment from "./pages/FlightPayment";
 import MyBookings from "./pages/MyBookings";
-import FlightManageSeat from "./pages/FlightManageSeat";
-import FlightCheckIn from "./pages/FlightCheckIn";
-import FlightBoardingPass from "./pages/FlightBoardingPass";
-import VerifyBoardingPass from "./pages/VerifyBoardingPass";
 import TixWallet from "./pages/TixWallet";
 import Profile from "./pages/Profile";
 import CatalogContent from "./pages/CatalogContent";
@@ -40,9 +36,9 @@ import FlightContent from "./components/FlightContent";
 import VendorDashboard from "./pages/vendor/VendorDashboard";
 import MovieVendorDashboard from "./pages/vendor/MovieVendorDashboard";
 import HotelVendorDashboard from "./pages/vendor/HotelVendorDashboard";
-import AddHotel from "./pages/vendor/AddHotel";
 import AddMovie from "./pages/vendor/AddMovie";
 import AddFlight from "./pages/vendor/AddFlight";
+import AddHotel from "./pages/vendor/AddHotel";
 import AddEvent from "./pages/vendor/AddEvent";
 import AddBus from "./pages/vendor/AddBus";
 import AddTravelPackage from "./pages/vendor/AddTravelPackage";
@@ -70,7 +66,6 @@ function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
-      <Route path="/verify/boarding-pass/:bookingId" element={<VerifyBoardingPass />} />
 
       <Route
         path="/dashboard"
@@ -104,9 +99,6 @@ function App() {
         <Route path="hotels/:id/payment" element={<HotelPayment />} />
         <Route path="my-hotel-bookings" element={<MyHotelBookings />} />
         <Route path="my-bookings" element={<MyBookings />} />
-        <Route path="flight-bookings/:bookingId/manage-seat" element={<FlightManageSeat />} />
-        <Route path="flight-bookings/:bookingId/check-in" element={<FlightCheckIn />} />
-        <Route path="flight-bookings/:bookingId/boarding-pass" element={<FlightBoardingPass />} />
         <Route path="wallet" element={<TixWallet />} />
         <Route path="profile" element={<Profile />} />
         <Route path="browse" element={<CatalogContent module="browse" />} />
@@ -153,18 +145,18 @@ function App() {
         }
       />
       <Route
-        path="/vendor/movies"
-        element={
-          <ProtectedRoute roles={["vendor", "admin"]}>
-            <MovieVendorDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/vendor/add-movie"
         element={
           <ProtectedRoute roles={["vendor", "admin"]}>
             <AddMovie />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendor/movies"
+        element={
+          <ProtectedRoute roles={["vendor", "admin"]}>
+            <MovieVendorDashboard />
           </ProtectedRoute>
         }
       />
@@ -209,6 +201,14 @@ function App() {
         }
       />
       <Route
+        path="/add-hotel"
+        element={
+          <ProtectedRoute roles={["vendor", "admin"]}>
+            <AddHotel />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/add-event"
         element={
           <ProtectedRoute roles={["vendor", "admin"]}>
@@ -217,13 +217,13 @@ function App() {
         }
       />
       <Route
-  path="/add-bus"
-  element={
-    <ProtectedRoute roles={["vendor", "admin"]}>
-      <AddBus />
-    </ProtectedRoute>
-  }
-/>
+        path="/add-bus"
+        element={
+          <ProtectedRoute roles={["vendor", "admin"]}>
+            <AddBus />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/add-travel-package"
         element={

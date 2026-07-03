@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { FaCheckCircle, FaTicketAlt } from "react-icons/fa";
 import "./Dashboard.css";
 import "./FlightPayment.css";
+import { flightImage } from "../utils/flightImages";
 
 function BookingConfirmation({ type = "movie" }) {
   const navigate = useNavigate();
@@ -32,6 +33,7 @@ function BookingConfirmation({ type = "movie" }) {
         </div>
       </div>
       <div className="wallet-transactions">
+        {type === "flight" && <div className="transaction-card"><img src={flightImage(flight, "banner")} alt="Confirmed flight" width="220" height="110" /><div><h4>Flight Image</h4><p>{flight.airline} {flight.flightNumber}</p></div></div>}
         <div className="transaction-card"><div><h4>Booking ID</h4><p>{booking?.bookingCode || "Not available"}</p></div><span className="green">Confirmed</span></div>
         {type === "flight" && <div className="transaction-card"><div><h4>PNR Number</h4><p>{pnr}</p></div><span>{flight.fromCode} to {flight.toCode}</span></div>}
         {type === "flight" && <div className="transaction-card"><div><h4>Passenger</h4><p>{passenger.name || "Not available"}</p></div><span>{passenger.email || passenger.mobile || ""}</span></div>}
@@ -39,7 +41,7 @@ function BookingConfirmation({ type = "movie" }) {
         {type === "flight" && <div className="transaction-card"><div><h4>Booking Status</h4><p>{booking?.bookingStatus || "CONFIRMED"}</p></div><span>Payment: {booking?.paymentStatus || "PAID"}</span></div>}
         {type === "movie" && <div className="transaction-card"><div><h4>Theatre</h4><p>{payload.theatre?.name || "Not available"}</p></div><span>{payload.showtime?.time}</span></div>}
         <div className="transaction-card"><div><h4>Seat</h4><p>{seatNumber || "Not Assigned"}</p></div><span>Rs {payload.totalAmount || booking?.amount || 0}</span></div>
-        {type === "flight" && <div className="transaction-card"><div><h4>Check-in Status</h4><p>{booking?.checkInStatus || "NOT_CHECKED_IN"}</p></div><span>{seatSelectionMode === "CHECK_IN" ? "Seat selection will open during check-in." : seatSelectionMode === "AFTER_BOOKING" ? "Manage your booking to select a seat." : seatSelectionMode === "AUTO_ASSIGN" ? "Seat will be assigned during check-in." : "Boarding pass not generated"}</span></div>}
+        {type === "flight" && <div className="transaction-card"><div><h4>Check-in Status</h4><p>{booking?.checkInStatus || "NOT_CHECKED_IN"}</p></div><span>{seatSelectionMode === "CHECK_IN" ? "Seat selection will open 24 hours before departure." : seatSelectionMode === "AFTER_BOOKING" ? "Manage your booking to select a seat." : "Boarding pass not generated"}</span></div>}
         <div className="transaction-card"><div><h4>Download Ticket</h4><p>{type === "flight" ? "This is your booking confirmation ticket, not a boarding pass." : "Your ticket is ready in My Bookings."}</p></div><button className="search-submit-btn" onClick={() => window.print()}>Download</button></div>
       </div>
       <button className="search-submit-btn" onClick={() => navigate("/dashboard/my-bookings")}>

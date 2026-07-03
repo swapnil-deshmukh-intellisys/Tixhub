@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FaArrowLeft, FaCheckCircle, FaCreditCard, FaMobileAlt, FaUniversity, FaWallet } from "react-icons/fa";
 import "./FlightPayment.css";
+import { flightImage } from "../utils/flightImages";
 
 const apiBase = "http://localhost:5000/api";
 
@@ -103,6 +104,7 @@ function FlightPayment() {
 
         <aside className="payment-summary-card">
           <h2>Booking Summary</h2>
+          <img src={flightImage(flight, "banner")} alt={`${flight.airline} flight`} width="240" height="120" />
           <div className="payment-summary-row"><span>Flight</span><strong>{flight.airline} {flight.flightNumber}</strong></div>
           <div className="payment-summary-row"><span>Route</span><strong>{flight.fromCode} to {flight.toCode}</strong></div>
           <div className="payment-summary-row"><span>Passenger</span><strong>{passenger?.name || "Not available"}</strong></div>

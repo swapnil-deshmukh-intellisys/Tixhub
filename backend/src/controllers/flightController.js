@@ -1,6 +1,7 @@
 const Booking = require("../models/Booking");
 const Flight = require("../models/Flight");
 const { emitVendorUpdated } = require("../socket");
+const { prepareFlightImages } = require("../services/flightImageService");
 
 const makeBookingCode = () => `TH${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 const makePnr = () => `PNR${Date.now().toString(36).toUpperCase().slice(-6)}${Math.random().toString(36).slice(2, 4).toUpperCase()}`;
@@ -8,7 +9,7 @@ const makePnr = () => `PNR${Date.now().toString(36).toUpperCase().slice(-6)}${Ma
 const toBool = (value) => value === true || value === "true" || value === "yes" || value === 1 || value === "1";
 const number = (value, fallback = 0) => Number(value === undefined || value === null || value === "" ? fallback : value);
 const airportCode = (value) => String(value || "AIR").trim().slice(0, 3).toUpperCase();
-const seatSelectionModes = ["DURING_BOOKING", "AFTER_BOOKING", "CHECK_IN", "AUTO_ASSIGN"];
+const seatSelectionModes = ["DURING_BOOKING", "AFTER_BOOKING", "CHECK_IN"];
 let seatMutationQueue = Promise.resolve();
 
 // Seat claims are serialized so payment and manage-booking requests cannot take the same seat.
@@ -62,6 +63,9 @@ const normalizeFlightPayload = (body, user) => {
     airlineName: body.airline_name ?? body.airlineName ?? body.airline ?? "",
     flightName: body.flight_name ?? body.flightName ?? body.airline_name ?? body.airlineName ?? body.airline ?? "",
     airlineLogo: body.airline_logo ?? body.airlineLogo ?? body.airlineLogoUrl ?? "",
+    flightBanner: body.flight_banner ?? body.flightBanner ?? body.bannerImage ?? body.bannerImageUrl ?? "",
+    flightThumbnail: body.flight_thumbnail ?? body.flightThumbnail ?? body.thumbnailImage ?? body.imageUrl ?? "",
+    flightGallery: Array.isArray(body.flightGallery) ? body.flightGallery : [],
     flightNumber: body.flight_number ?? body.flightNumber ?? "",
     flightType: body.flight_type ?? body.flightType ?? "domestic",
     fromCity: body.from_city ?? body.fromCity ?? body.from ?? "",
@@ -94,7 +98,7 @@ const normalizeFlightPayload = (body, user) => {
     status: body.status || "active",
     seats: buildSeats(totalSeats, aircraft, body.seats),
     seatSelectionMode: seatSelectionModes.includes(body.seatSelectionMode) ? body.seatSelectionMode : "CHECK_IN",
-    checkInOpenHoursBefore: Math.max(0, number(body.checkInOpenHoursBefore, 24)),
+    checkInOpenHoursBefore: 24,
   };
 };
 
@@ -103,6 +107,10 @@ const mapFlight = (flight) => ({
   _id: flight._id,
   vendor: flight.vendor || flight.vendorId,
   airlineLogoUrl: flight.airlineLogo || "",
+  airlineLogo: flight.airlineLogo || "",
+  flightBanner: flight.flightBanner || "",
+  flightThumbnail: flight.flightThumbnail || "",
+  flightGallery: flight.flightGallery || [],
   airline: flight.airlineName,
   airlineName: flight.airlineName,
   flightName: flight.flightName || flight.airlineName,
@@ -146,7 +154,8 @@ const mapFlight = (flight) => ({
 });
 
 const createFlight = async (req, res) => {
-  const payload = normalizeFlightPayload(req.body, req.user);
+  const images = prepareFlightImages(req, req.body);
+  const payload = normalizeFlightPayload({ ...req.body, ...images }, req.user);
   if (!payload.airlineName || !payload.flightNumber || !payload.fromCity || !payload.toCity) {
     return res.status(400).json({ message: "Airline, flight number, from city, and to city are required" });
   }
@@ -170,7 +179,9 @@ const updateFlight = async (req, res) => {
   const existing = await Flight.findById(req.params.id);
   if (!existing) return res.status(404).json({ message: "Flight not found" });
 
-  const payload = normalizeFlightPayload({ ...existing.toObject(), ...req.body }, req.user);
+  const existingData = existing.toObject();
+  const images = prepareFlightImages(req, req.body, existingData);
+  const payload = normalizeFlightPayload({ ...existingData, ...req.body, ...images }, req.user);
   const flight = await Flight.findByIdAndUpdate(req.params.id, payload, { new: true });
   res.json({ message: "Flight updated", flight: mapFlight(flight) });
 };
@@ -280,7 +291,7 @@ const createFlightBooking = async (req, res) => withSeatMutationLock(async () =>
       cabinClass: req.body.class_type || req.body.classType || req.body.details?.cabinClass || flight?.cabinClass || flight?.classType,
       seats: assignedSeats,
       seatSelectionMode,
-      checkInOpenHoursBefore: Number(flight?.checkInOpenHoursBefore ?? flightDetails.checkInOpenHoursBefore ?? 24),
+      checkInOpenHoursBefore: 24,
       bookingStatus: "CONFIRMED",
       paymentStatus: "PAID",
       checkInStatus: "NOT_CHECKED_IN",
@@ -333,6 +344,11 @@ const getAvailableFlightSeats = async (req, res) => {
   const result = await getOwnedFlightBooking(req.params.id, req.user.id);
   if (result.error) return res.status(404).json({ message: result.error });
   const { booking, flight } = result;
+  const mode = flight.seatSelectionMode || "CHECK_IN";
+  const checkInWindow = getCheckInWindow(flight);
+  if (mode === "CHECK_IN" && !checkInWindow.isCheckInOpen) {
+    return res.status(403).json({ message: "Seat selection will open 24 hours before departure.", ...checkInWindow });
+  }
   return res.json({
     booking: {
       _id: booking._id,
@@ -340,7 +356,7 @@ const getAvailableFlightSeats = async (req, res) => {
       pnr: booking.pnr || booking.details?.pnr,
       seatNumber: booking.seatNumber || booking.seats?.[0] || null,
       bookingStatus: booking.bookingStatus,
-      seatSelectionMode: flight.seatSelectionMode || "CHECK_IN",
+      seatSelectionMode: mode,
     },
     flight: mapFlight(flight),
     seats: (flight.seats || []).map((seat) => ({ seatNumber: seat.seatNumber, status: seat.status })),
@@ -348,7 +364,7 @@ const getAvailableFlightSeats = async (req, res) => {
 };
 
 const getCheckInWindow = (flight) => {
-  const hoursBefore = Number(flight.checkInOpenHoursBefore ?? 24);
+  const hoursBefore = 24;
   const departure = new Date(`${flight.departureDate || ""}T${flight.departureTime || "00:00"}:00`);
   if (Number.isNaN(departure.getTime())) {
     return { isCheckInOpen: false, checkInOpenHoursBefore: hoursBefore, checkInOpensAt: null, departureAt: null };

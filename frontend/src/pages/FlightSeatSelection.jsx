@@ -59,6 +59,16 @@ function FlightSeatSelection() {
     );
   }
 
+  if ((flight.seatSelectionMode || "DURING_BOOKING") !== "DURING_BOOKING") {
+    return (
+      <div className="flight-empty">
+        <h1>Seat selection is not available during booking</h1>
+        <p>{flight.seatSelectionMode === "CHECK_IN" ? "Seat selection will open 24 hours before departure." : "You can select a seat after your booking is confirmed."}</p>
+        <button onClick={() => navigate(-1)}>Back</button>
+      </div>
+    );
+  }
+
   const layout = getLayout(flight?.aircraftType || flight?.aircraft || "");
   const actualSeats = Array.isArray(flight.seats) ? flight.seats : [];
   const configuredSeatCount = Number(flight.totalSeats || 0);

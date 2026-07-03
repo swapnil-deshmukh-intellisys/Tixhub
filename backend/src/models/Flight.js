@@ -2,6 +2,9 @@ const createInMemoryModel = require("./inMemoryModel");
 
 module.exports = createInMemoryModel("Flight", {
   airlineLogo: "",
+  flightBanner: "",
+  flightThumbnail: "",
+  flightGallery: [],
   flightName: "",
   aircraftType: "A320",
   cabinClass: "Economy",

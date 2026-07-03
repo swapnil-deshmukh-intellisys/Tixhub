@@ -32,30 +32,18 @@ export const vendorSidebarConfig = {
   ],
   flight: [
     {
-      title: "",
-      items: [{ label: "Dashboard", path: "/vendor/dashboard", icon: "dashboard" }],
-    },
-    {
-      title: "Flight Management",
+      title: "Flight Panel",
       items: [
-        { label: "Flights", path: "/vendor/flights", icon: "flight" },
+        { label: "Dashboard Overview", path: "/vendor/flights", icon: "dashboard" },
+        { label: "Add New Flight", path: "/vendor/add-flight", icon: "add" },
+        { label: "Manage Flights", path: "/vendor/my-flights", icon: "flight" },
         { label: "Seat Management", path: "/vendor/flight-seat-management", icon: "seat" },
-        { label: "Bookings", path: "/vendor/flight-bookings", icon: "ticket" },
-        { label: "Passengers", path: "/vendor/passengers", icon: "profile" },
-      ],
-    },
-    {
-      title: "Reports",
-      items: [
-        { label: "Revenue", path: "/vendor/flight-revenue", icon: "revenue" },
-        { label: "Reports", path: "/vendor/flight-reports", icon: "reports" },
-      ],
-    },
-    {
-      title: "Settings",
-      items: [
-        { label: "Profile", path: "/vendor/profile", icon: "profile" },
-        { label: "Settings", path: "/vendor/settings", icon: "settings" },
+        { label: "Flight Bookings", path: "/vendor/flight-bookings", icon: "ticket" },
+        { label: "Calendar View", path: "/vendor/flight-calendar", icon: "calendar" },
+        { label: "Pricing & Fare Rules", path: "/vendor/add-flight?step=3", icon: "revenue" },
+        { label: "Policies & Rules", path: "/vendor/add-flight?step=5", icon: "settings" },
+        { label: "Flight Notes", path: "/vendor/flight-notes", icon: "reports" },
+        { label: "Reports & Analytics", path: "/vendor/flight-reports", icon: "reports" },
       ],
     },
   ],

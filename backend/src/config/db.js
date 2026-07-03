@@ -242,6 +242,9 @@ const ensureFlightsSchema = async (connection) => {
       airline_name VARCHAR(255) NOT NULL,
       flight_name VARCHAR(255) NULL,
       airline_logo TEXT NULL,
+      flight_banner TEXT NULL,
+      flight_thumbnail TEXT NULL,
+      flight_gallery JSON NULL,
       flight_number VARCHAR(80) NOT NULL,
       flight_type VARCHAR(80) NOT NULL DEFAULT 'domestic',
       from_city VARCHAR(150) NOT NULL,
@@ -284,6 +287,9 @@ const ensureFlightsSchema = async (connection) => {
   const columnMap = new Map(columns.map((column) => [column.Field, column]));
   await ensureColumn(connection, "flights", columnMap, "vendor_id", "VARCHAR(24) NULL");
   await ensureColumn(connection, "flights", columnMap, "airline_logo", "TEXT NULL");
+  await ensureColumn(connection, "flights", columnMap, "flight_banner", "TEXT NULL");
+  await ensureColumn(connection, "flights", columnMap, "flight_thumbnail", "TEXT NULL");
+  await ensureColumn(connection, "flights", columnMap, "flight_gallery", "JSON NULL");
   await ensureColumn(connection, "flights", columnMap, "flight_name", "VARCHAR(255) NULL");
   await ensureColumn(connection, "flights", columnMap, "booked_seats", "INT NOT NULL DEFAULT 0");
   await ensureColumn(connection, "flights", columnMap, "blocked_seats", "INT NOT NULL DEFAULT 0");

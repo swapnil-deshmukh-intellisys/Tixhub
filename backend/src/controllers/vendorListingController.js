@@ -15,6 +15,7 @@ const SeatBlock = require("../models/SeatBlock");
 const User = require("../models/User");
 const { pool } = require("../config/db");
 const { emitVendorUpdated } = require("../socket");
+const { prepareFlightImages } = require("../services/flightImageService");
 
 const moduleTitles = {
   flight: "airlineName",
@@ -673,7 +674,11 @@ const flightSummaryFields = [
   "airlineName",
   "flightName",
   "airlineLogo",
+  "flightBanner",
+  "flightThumbnail",
+  "flightGallery",
   "flightNumber",
+  "flightType",
   "aircraftType",
   "cabinClass",
   "status",
@@ -700,6 +705,8 @@ const flightSummaryFields = [
   "baggageAllowance",
   "refundPolicy",
   "cancellationPolicy",
+  "refundable",
+  "mealIncluded",
   "seatSelectionMode",
   "checkInOpenHoursBefore",
 ];
@@ -1144,10 +1151,10 @@ const flightPayloadFromRequest = (body) => {
   payload.bookedSeats = numberValue(payload.bookedSeats);
   payload.blockedSeats = numberValue(payload.blockedSeats);
   payload.status = String(payload.status || "active").toLowerCase();
-  payload.seatSelectionMode = ["DURING_BOOKING", "AFTER_BOOKING", "CHECK_IN", "AUTO_ASSIGN"].includes(payload.seatSelectionMode)
+  payload.seatSelectionMode = ["DURING_BOOKING", "AFTER_BOOKING", "CHECK_IN"].includes(payload.seatSelectionMode)
     ? payload.seatSelectionMode
     : "CHECK_IN";
-  payload.checkInOpenHoursBefore = Math.max(0, numberValue(payload.checkInOpenHoursBefore ?? 24));
+  payload.checkInOpenHoursBefore = 24;
 
   if (!payload.totalSeats) {
     payload.totalSeats = buildFlightSeats(payload.aircraftType || "A320", payload.ticketPrice).length;
@@ -1194,8 +1201,9 @@ const mergeFlightBookingsIntoSeats = async (req, flight) => {
   return seats;
 };
 
-const prepareFlightPayload = (req) => {
-  const payload = flightPayloadFromRequest(req.body);
+const prepareFlightPayload = (req, existing = {}) => {
+  const images = prepareFlightImages(req, req.body, existing);
+  const payload = flightPayloadFromRequest({ ...req.body, ...images });
   const seats = buildFlightSeats(payload.aircraftType || "A320", payload.ticketPrice || 0)
     .slice(0, payload.totalSeats || undefined)
     .map((seat) => ({
@@ -1244,7 +1252,7 @@ const updateVendorFlight = async (req, res) => {
   const existing = await Flight.findOne({ _id: req.params.id, ...vendorQuery(req) });
   if (!existing) return res.status(404).json({ message: "Flight not found" });
 
-  const payload = prepareFlightPayload(req);
+  const payload = prepareFlightPayload(req, existing.toObject());
   const bookedSeats = new Map((existing.seats || []).filter((seat) => seat.status === "booked").map((seat) => [seat.seatNumber, seat]));
   payload.seats = payload.seats.map((seat) => bookedSeats.get(seat.seatNumber) || seat);
   normalizeFlightCounts(payload);

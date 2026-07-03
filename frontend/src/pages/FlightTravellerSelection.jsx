@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FaArrowLeft, FaUserFriends } from "react-icons/fa";
 import "./FlightTravellerSelection.css";
+import { flightImage } from "../utils/flightImages";
 
 function FlightTravellerSelection() {
   const navigate = useNavigate();
@@ -69,6 +70,7 @@ function FlightTravellerSelection() {
 
         <section className="traveller-card">
           <h2>Trip Summary</h2>
+          <img src={flightImage(flight, "banner")} alt={`${flight.airline} flight`} width="220" height="110" />
           <div className="traveller-row"><div><strong>Cabin Class</strong><span>{cabinClass}</span></div></div>
           <div className="traveller-row"><div><strong>Selected Seats</strong><span>{seats.join(", ") || "Not selected"}</span></div></div>
           <div className="traveller-row"><div><strong>Passengers</strong><span>{totalTravellers}</span></div></div>

@@ -108,6 +108,10 @@ const mapVendorFlight = (listing) => {
     source: "vendor",
     vendor: listing.vendor,
     airlineLogoUrl: details.airlineLogoUrl || "",
+    airlineLogo: details.airlineLogo || details.airlineLogoUrl || "",
+    flightBanner: details.flightBanner || details.bannerImage || details.bannerImageUrl || "",
+    flightThumbnail: details.flightThumbnail || details.thumbnailImage || details.imageUrl || "",
+    flightGallery: Array.isArray(details.flightGallery) ? details.flightGallery : [],
     airline: details.airlineName || listing.title,
     flightName: details.flightName || details.airlineName || listing.title,
     flightNumber: details.flightNumber || "TIX-FLIGHT",
@@ -150,6 +154,10 @@ const mapFlight = (flight) => ({
   source: "vendor-flight",
   vendor: flight.vendor || flight.vendorId,
   airlineLogoUrl: flight.airlineLogo || "",
+  airlineLogo: flight.airlineLogo || "",
+  flightBanner: flight.flightBanner || "",
+  flightThumbnail: flight.flightThumbnail || "",
+  flightGallery: flight.flightGallery || [],
   airline: flight.airlineName,
   flightName: flight.flightName || flight.airlineName,
   flightNumber: flight.flightNumber,
@@ -233,6 +241,8 @@ router.get("/flights/offers", async (req, res) => {
       date: flight.departureDate,
       price: flight.price,
       rating: flight.rating,
+      flightThumbnail: flight.flightThumbnail || "",
+      flightBanner: flight.flightBanner || "",
     }))
   );
 });

@@ -14,6 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import {
+  Armchair,
   BarChart3,
   Bell,
   BriefcaseBusiness,
@@ -22,12 +23,15 @@ import {
   Clapperboard,
   CreditCard,
   Film,
+  FileText,
   Globe2,
   Headphones,
   Hotel,
+  IndianRupee,
   LayoutDashboard,
   LogOut,
   Plane,
+  Plus,
   Bus,
   QrCode,
   ShieldCheck,
@@ -40,6 +44,7 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import FlightModule from "./FlightModule";
+import AddFlight from "./AddFlight";
 import BusVendorDashboard from "./BusVendorDashboard";
 import VendorServiceModule from "./VendorServiceModule";
 import "./VendorDashboard.css";
@@ -77,6 +82,19 @@ const sidebarItems = [
   ["Payment Details", BriefcaseBusiness, "/vendor/payment-details"],
   ["Profile", Settings, "/vendor/profile"],
   ["Support", Headphones, "/vendor/support"],
+];
+
+const flightSidebarItems = [
+  ["Dashboard Overview", LayoutDashboard, "/vendor/flights"],
+  ["Add New Flight", Plus, "/vendor/add-flight"],
+  ["Manage Flights", Plane, "/vendor/my-flights"],
+  ["Seat Management", Armchair, "/vendor/flight-seat-management"],
+  ["Flight Bookings", Ticket, "/vendor/flight-bookings"],
+  ["Calendar View", CalendarDays, "/vendor/flight-calendar"],
+  ["Pricing & Fare Rules", IndianRupee, "/vendor/add-flight?step=3"],
+  ["Policies & Rules", ShieldCheck, "/vendor/add-flight?step=5"],
+  ["Flight Notes", FileText, "/vendor/flight-notes"],
+  ["Reports & Analytics", BarChart3, "/vendor/flight-reports"],
 ];
 
 const serviceMeta = {
@@ -375,7 +393,8 @@ function VendorDashboard() {
     if (activeRoute === "staff") return <StaffPage staff={staff} reload={loadDashboard} />;
     if (activeRoute === "notification-center") return <NotificationCenterPage notifications={notifications} reload={loadDashboard} />;
     if (activeRoute === "movie-status") return <MovieStatusPage movies={movies} reload={loadDashboard} />;
-    if (["flights", "add-flight", "my-flights", "flight-seat-management", "flight-bookings", "passengers", "flight-revenue", "flight-reports"].includes(activeRoute) || activeRoute.startsWith("edit-flight")) return <FlightModule page={activeRoute === "flights" ? "dashboard" : activeRoute} navigate={navigate} />;
+    if (activeRoute === "add-flight" || activeRoute.startsWith("edit-flight")) return <AddFlight />;
+    if (["flights", "my-flights", "flight-seat-management", "flight-bookings", "passengers", "flight-revenue", "flight-calendar", "flight-notes", "flight-reports"].includes(activeRoute)) return <FlightModule navigate={navigate} section={activeRoute} />;
     const serviceListMatch = activeRoute.match(/^(buses|trains|events)(?:\/([^/]+))?$/);
     if (serviceListMatch) return <VendorServiceModule service={serviceListMatch[1]} mode={serviceListMatch[2] ? "details" : "list"} id={serviceListMatch[2]} navigate={navigate} />;
     const serviceFormMatch = activeRoute.match(/^(add|edit)-(bus|train|event)(?:\/([^/]+))?$/);
@@ -400,17 +419,17 @@ function VendorDashboard() {
 
   return (
     <div className="vendor-shell">
-      <aside className="vendor-sidebar">
+      <aside className={`vendor-sidebar${activeService === "flights" ? " flight-panel-sidebar" : ""}`}>
         <div className="vendor-brand">
-          <span className="vendor-logo-mark"><Clapperboard size={24} /></span>
-          <strong>TixHub Vendor</strong>
+          <span className="vendor-logo-mark">{activeService === "flights" ? <Plane size={24} /> : <Clapperboard size={24} />}</span>
+          <strong>{activeService === "flights" ? "Flight Panel" : "TixHub Vendor"}</strong>
         </div>
 
         <nav className="vendor-sidebar-nav">
-          {sidebarItems.map(([label, Icon, path]) => (
+          {(activeService === "flights" ? flightSidebarItems : sidebarItems).map(([label, Icon, path]) => (
             <button
               key={label}
-              className={(label === "Dashboard" && activeRoute === "dashboard") || path.endsWith(activeRoute) ? "active" : ""}
+              className={activeService === "flights" ? `${location.pathname}${location.search}` === path ? "active" : "" : (label === "Dashboard" && activeRoute === "dashboard") || path.endsWith(activeRoute) ? "active" : ""}
               type="button"
               onClick={() => navigate(path)}
             >

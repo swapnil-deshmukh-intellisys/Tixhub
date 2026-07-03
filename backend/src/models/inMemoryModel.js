@@ -156,6 +156,9 @@ const flightFromRow = (Model, row) =>
     airlineName: row.airline_name,
     flightName: row.flight_name || row.airline_name || "",
     airlineLogo: row.airline_logo || "",
+    flightBanner: row.flight_banner || "",
+    flightThumbnail: row.flight_thumbnail || "",
+    flightGallery: parseJson(row.flight_gallery, []),
     flightNumber: row.flight_number,
     flightType: row.flight_type || "domestic",
     fromCity: row.from_city,
@@ -548,7 +551,7 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
 
           await pool.query(
             `INSERT INTO flights (
-              id, vendor_id, airline_name, flight_name, airline_logo, flight_number, flight_type,
+              id, vendor_id, airline_name, flight_name, airline_logo, flight_banner, flight_thumbnail, flight_gallery, flight_number, flight_type,
               from_city, from_airport, from_code, to_city, to_airport, to_code,
               departure_date, departure_time, arrival_date, arrival_time, duration,
               aircraft, class_type, total_seats, available_seats, booked_seats, blocked_seats,
@@ -556,12 +559,15 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               refundable, meal_included, status, seats, seat_selection_mode,
               check_in_open_hours_before, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
               vendor_id = VALUES(vendor_id),
               airline_name = VALUES(airline_name),
               flight_name = VALUES(flight_name),
               airline_logo = VALUES(airline_logo),
+              flight_banner = VALUES(flight_banner),
+              flight_thumbnail = VALUES(flight_thumbnail),
+              flight_gallery = VALUES(flight_gallery),
               flight_number = VALUES(flight_number),
               flight_type = VALUES(flight_type),
               from_city = VALUES(from_city),
@@ -599,6 +605,9 @@ const createInMemoryModel = (name, defaults = {}, seed = []) => {
               document.airlineName || document.airline || "",
               document.flightName || document.airlineName || document.airline || "",
               document.airlineLogo || document.airlineLogoUrl || "",
+              document.flightBanner || "",
+              document.flightThumbnail || "",
+              JSON.stringify(document.flightGallery || []),
               document.flightNumber || "",
               document.flightType || "domestic",
               document.fromCity || document.from || "",

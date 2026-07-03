@@ -3,6 +3,7 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { FaCalendarAlt, FaClock, FaPlane, FaSearch, FaStar } from "react-icons/fa";
 import "../pages/FlightContent.css";
+import { flightImage } from "../utils/flightImages";
 
 const apiBase = "http://localhost:5000/api";
 
@@ -127,7 +128,7 @@ function FlightContent() {
           {flights.map((flight) => (
             <article className="flight-result-card" key={flight.id || flight._id}>
               <div className="airline-mark">
-                {flight.airlineLogoUrl ? <img src={flight.airlineLogoUrl} alt={flight.airline} /> : flight.airline.slice(0, 2).toUpperCase()}
+                <img src={flightImage(flight)} alt={`${flight.airline} flight`} />
               </div>
               <div>
                 <h3>{flight.airline}</h3>

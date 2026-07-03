@@ -3,6 +3,7 @@ import axios from "axios";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { FaArrowLeft, FaClock, FaPlane, FaRupeeSign, FaSuitcaseRolling } from "react-icons/fa";
 import "./FlightDetails.css";
+import { flightImage } from "../utils/flightImages";
 
 const apiBase = "http://localhost:5000/api";
 
@@ -48,7 +49,8 @@ function FlightDetails() {
     <div className="flight-details-page">
       <header className="flight-details-hero">
         <button className="flight-back-btn" onClick={() => navigate(-1)}><FaArrowLeft /></button>
-        <div className="airline-logo">{flight.airlineLogoUrl ? <img src={flight.airlineLogoUrl} alt={flight.airline} /> : flight.airline.slice(0, 2).toUpperCase()}</div>
+        <div className="airline-logo"><img src={flightImage(flight, "logo")} alt={flight.airline} /></div>
+        <img src={flightImage(flight, "banner")} alt={`${flight.airline} banner`} width="240" height="120" />
         <div className="flight-hero-copy">
           <span className="flight-chip">Flight Details</span>
           <h1>{flight.airline} {flight.flightNumber}</h1>
@@ -90,11 +92,11 @@ function FlightDetails() {
             <span>{flight.departureDate || "Date not available"}</span>
             <span>{flight.availableSeats ?? "Seats not available"} seats available</span>
           </div>
-          {flight.seatSelectionMode === "CHECK_IN" && <p>Seat selection will open during check-in.</p>}
+          {flight.seatSelectionMode === "CHECK_IN" && <p>Seat selection will open 24 hours before departure.</p>}
           {flight.seatSelectionMode === "AFTER_BOOKING" && <p>You can select a seat from Manage Booking after payment.</p>}
-          {flight.seatSelectionMode === "AUTO_ASSIGN" && <p>Your seat will be assigned automatically during check-in.</p>}
           <button onClick={continueFlow}>{flight.seatSelectionMode === "DURING_BOOKING" ? "Select Seats" : "Continue Booking"}</button>
         </section>
+        {flight.flightGallery?.length > 0 && <section className="flight-fare-card"><h2>Cabin / Interior</h2>{flight.flightGallery.map((image) => <img key={image} src={image} alt="Flight cabin interior" width="180" height="110" />)}</section>}
       </main>
     </div>
   );

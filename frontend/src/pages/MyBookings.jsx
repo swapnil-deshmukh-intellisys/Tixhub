@@ -9,7 +9,7 @@ const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("
 
 const flightCheckInWindow = (booking, now) => {
   const flight = booking.details?.flight || {};
-  const hours = Number(booking.details?.checkInOpenHoursBefore ?? flight.checkInOpenHoursBefore ?? 24);
+  const hours = 24;
   const departure = new Date(`${flight.departureDate || ""}T${flight.departureTime || "00:00"}:00`).getTime();
   if (Number.isNaN(departure)) return { hours, open: false };
   return { hours, open: now >= departure - hours * 60 * 60 * 1000 && now < departure };
@@ -69,8 +69,7 @@ function MyBookings() {
               <p className="subtitle">{booking.module} - {getBookingId(booking)}</p>
               <p className="time-details">{booking.module === "flight" ? `Confirmed flight ticket - PNR ${getPnr(booking)}` : "QR Ticket and invoice ready"}</p>
               {booking.module === "flight" && <p className="time-details">Seat: {getAssignedSeat(booking) || "Not Assigned"}</p>}
-              {booking.module === "flight" && !getAssignedSeat(booking) && getSeatSelectionMode(booking) === "CHECK_IN" && <p className="time-details">Seat selection will open during check-in.</p>}
-              {booking.module === "flight" && !getAssignedSeat(booking) && getSeatSelectionMode(booking) === "AUTO_ASSIGN" && <p className="time-details">Your seat will be assigned automatically during check-in.</p>}
+              {booking.module === "flight" && !getAssignedSeat(booking) && getSeatSelectionMode(booking) === "CHECK_IN" && <p className="time-details">Seat selection will open 24 hours before departure.</p>}
               {booking.module === "flight" && !isCheckedIn(booking) && !flightCheckInWindow(booking, now).open && <p className="time-details">Check-in opens {flightCheckInWindow(booking, now).hours} hours before departure.</p>}
             </div>
           </div>
