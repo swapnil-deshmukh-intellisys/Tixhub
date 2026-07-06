@@ -378,6 +378,54 @@ const ensureBookingsSchema = async (connection) => {
   await connection.query("ALTER TABLE flight_bookings MODIFY payment_status VARCHAR(40) NOT NULL DEFAULT 'paid'");
 };
 
+const ensureEventSchema = async (connection) => {
+  const [eventColumns] = await connection.query("SHOW COLUMNS FROM events");
+  const events = new Map(eventColumns.map((column) => [column.Field, column]));
+  await ensureColumn(connection, "events", events, "event_title", "VARCHAR(255) NULL");
+  await ensureColumn(connection, "events", events, "venue", "VARCHAR(255) NULL");
+  await ensureColumn(connection, "events", events, "event_name", "VARCHAR(255) NULL");
+  await ensureColumn(connection, "events", events, "category", "VARCHAR(100) NOT NULL DEFAULT 'Event'");
+  await ensureColumn(connection, "events", events, "event_type", "VARCHAR(100) NOT NULL DEFAULT 'General'");
+  await ensureColumn(connection, "events", events, "organizer_name", "VARCHAR(180) NULL");
+  await ensureColumn(connection, "events", events, "event_date", "DATE NULL");
+  await ensureColumn(connection, "events", events, "start_time", "TIME NULL");
+  await ensureColumn(connection, "events", events, "end_time", "TIME NULL");
+  await ensureColumn(connection, "events", events, "venue_name", "VARCHAR(255) NULL");
+  await ensureColumn(connection, "events", events, "city", "VARCHAR(150) NULL");
+  await ensureColumn(connection, "events", events, "address", "TEXT NULL");
+  await ensureColumn(connection, "events", events, "ticket_price", "DECIMAL(12,2) NOT NULL DEFAULT 0");
+  await ensureColumn(connection, "events", events, "poster_url", "LONGTEXT NULL");
+  await ensureColumn(connection, "events", events, "banner_url", "LONGTEXT NULL");
+  await ensureColumn(connection, "events", events, "description", "TEXT NULL");
+  await ensureColumn(connection, "events", events, "terms", "TEXT NULL");
+  await ensureColumn(connection, "events", events, "tags", "JSON NULL");
+  await ensureColumn(connection, "events", events, "state", "VARCHAR(150) NULL");
+  await ensureColumn(connection, "events", events, "country", "VARCHAR(100) NOT NULL DEFAULT 'India'");
+  await ensureColumn(connection, "events", events, "map_url", "TEXT NULL");
+  await ensureColumn(connection, "events", events, "end_date", "DATE NULL");
+  await ensureColumn(connection, "events", events, "timezone", "VARCHAR(80) NOT NULL DEFAULT 'Asia/Kolkata'");
+  await ensureColumn(connection, "events", events, "ticket_type", "VARCHAR(100) NOT NULL DEFAULT 'General Admission'");
+  await ensureColumn(connection, "events", events, "booking_limit", "INT NOT NULL DEFAULT 10");
+  await ensureColumn(connection, "events", events, "early_bird_price", "DECIMAL(12,2) NULL");
+  await ensureColumn(connection, "events", events, "early_bird_until", "DATE NULL");
+  await ensureColumn(connection, "events", events, "gallery", "JSON NULL");
+  await ensureColumn(connection, "events", events, "thumbnail_url", "LONGTEXT NULL");
+  await ensureColumn(connection, "events", events, "video_url", "TEXT NULL");
+  await ensureColumn(connection, "events", events, "organizer_email", "VARCHAR(190) NULL");
+  await ensureColumn(connection, "events", events, "organizer_phone", "VARCHAR(40) NULL");
+  await ensureColumn(connection, "events", events, "organizer_website", "TEXT NULL");
+  await ensureColumn(connection, "events", events, "social_links", "JSON NULL");
+  if (events.has("event_title")) await connection.query("UPDATE events SET event_name=COALESCE(NULLIF(event_name,''),event_title)");
+  if (events.has("venue")) await connection.query("UPDATE events SET venue_name=COALESCE(NULLIF(venue_name,''),venue)");
+
+  const [bookingColumns] = await connection.query("SHOW COLUMNS FROM event_bookings");
+  const bookings = new Map(bookingColumns.map((column) => [column.Field, column]));
+  await ensureColumn(connection, "event_bookings", bookings, "qr_code", "VARCHAR(255) NULL");
+  await connection.query("UPDATE event_bookings SET qr_code=CONCAT('EVENT-',id) WHERE qr_code IS NULL OR qr_code=''");
+  const [qrIndexes] = await connection.query("SHOW INDEX FROM event_bookings WHERE Key_name='uq_event_booking_qr'");
+  if (!qrIndexes.length) await connection.query("ALTER TABLE event_bookings ADD UNIQUE INDEX uq_event_booking_qr (qr_code)");
+};
+
 const ensureMovieSeatsSchema = async (connection) => {
   await connection.query(`
     CREATE TABLE IF NOT EXISTS movie_seats (
@@ -763,6 +811,8 @@ const ready = (async () => {
     await runSqlFile(connection, path.join(__dirname, "..", "..", "migrations", "2026-06-18-vendor-production-modules.sql"));
     await runSqlFile(connection, path.join(__dirname, "..", "..", "migrations", "2026-06-30-vendor-service-modules.sql"));
     await runSqlFile(connection, path.join(__dirname, "..", "..", "migrations", "2026-07-01-hotel-module.sql"));
+    await runSqlFile(connection, path.join(__dirname, "..", "..", "migrations", "2026-07-06-event-module.sql"));
+    await ensureEventSchema(connection);
     await ensureHotelSchema(connection);
     await migrateMovieRecords(connection);
     console.log("MySQL Connected");

@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { FaPlay } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import SeatCountModal from "./SeatCountModal";
 import "./MoviesContent.css";
 
 const fallbackImage =
@@ -95,7 +94,6 @@ function MoviesContent() {
 
   const [moviesData, setMoviesData] = useState([]);
   const [activeLanguage, setActiveLanguage] = useState("All");
-  const [selectedMovie, setSelectedMovie] = useState(null);
 
   useEffect(() => {
     fetchMovies();
@@ -116,36 +114,11 @@ function MoviesContent() {
       ? moviesData
       : moviesData.filter((movie) => movie.language === activeLanguage);
 
-  const openSeatCount = (movie) => {
+  const openMovieDetails = (movie) => {
+    const movieId = movie._id || movie.id;
+    if (!movieId) return;
     sessionStorage.setItem("selectedMovie", JSON.stringify(movie));
-    setSelectedMovie(movie);
-  };
-
-  const openSeatSelection = ({ seatCount, category }) => {
-    if (!selectedMovie) return;
-
-    const theatre = {
-      name: selectedMovie.theatre || selectedMovie.theatreName || "Theatre",
-      city: selectedMovie.city || selectedMovie.theatreCity || "",
-    };
-    const showtime = {
-      time: selectedMovie.showTime || selectedMovie.showTimes?.[0] || "Show Time",
-      date: {
-        label: selectedMovie.showDate || selectedMovie.releaseDate || "Today",
-        day: "",
-        month: "",
-      },
-    };
-
-    navigate(`/dashboard/movies/${selectedMovie._id}/seats`, {
-      state: {
-        movie: selectedMovie,
-        theatre,
-        showtime,
-        selectedSeats: seatCount,
-        category,
-      },
-    });
+    navigate(`/dashboard/movies/${movieId}`, { state: { movie } });
   };
 
   const heroMovie = moviesData[0] || fallbackMovies[0];
@@ -201,7 +174,7 @@ function MoviesContent() {
 
       <div className="movies-grid">
         {filteredMovies.map((movie) => (
-          <div className="movie-card" key={movie._id} onClick={() => openSeatCount(movie)}>
+          <div className="movie-card" key={movie._id || movie.id} onClick={() => openMovieDetails(movie)}>
             <div className="poster-wrapper">
               <img src={movie.image} alt={movie.title} />
             </div>
@@ -213,13 +186,6 @@ function MoviesContent() {
         ))}
       </div>
 
-      {selectedMovie && (
-        <SeatCountModal
-          movie={selectedMovie}
-          onClose={() => setSelectedMovie(null)}
-          onSelectSeats={openSeatSelection}
-        />
-      )}
     </div>
   );
 }

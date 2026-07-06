@@ -19,6 +19,7 @@ const paymentRoutes = require("./src/routes/paymentRoutes");
 const seatRoutes = require("./src/routes/seatRoutes");
 const vendorServiceModuleRoutes = require("./src/routes/vendorServiceModuleRoutes");
 const hotelRoutes = require("./src/routes/hotelRoutes");
+const eventRoutes = require("./src/routes/eventRoutes");
 const { setIo } = require("./src/socket");
 
 const app = express();
@@ -143,6 +144,7 @@ app.use("/api/admin", adminRoutes);
 
 app.use("/api", movieRoutes);
 app.use("/api", hotelRoutes);
+app.use("/api", eventRoutes);
 app.use("/api", catalogRoutes);
 app.use("/api", flightRoutes);
 app.use("/api", bookingRoutes);

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "../App.css";
 
@@ -39,6 +39,7 @@ function Login() {
         storage.setItem(
           "ticketproUser",
           JSON.stringify({
+            id: data.user.id,
             name: data.user.name,
             email: data.user.email,
             mobile: data.user.mobile,

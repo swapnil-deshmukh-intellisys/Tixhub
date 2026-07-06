@@ -28,6 +28,13 @@ import HotelGuestDetails from "./pages/HotelGuestDetails";
 import HotelPayment from "./pages/HotelPayment";
 import HotelBookingConfirmation from "./pages/HotelBookingConfirmation";
 import MyHotelBookings from "./pages/MyHotelBookings";
+import Events from "./pages/Events";
+import EventDetails from "./pages/EventDetails";
+import EventTicketSelection from "./pages/EventTicketSelection";
+import EventPayment from "./pages/EventPayment";
+import EventConfirmation from "./pages/EventConfirmation";
+import EventSeatSelection from "./pages/EventSeatSelection";
+import BookingSelection from "./pages/BookingSelection";
 
 import UpcomingMovies from "./components/UpcomingMovies";
 import MovieContent from "./components/MovieContent";
@@ -36,6 +43,7 @@ import FlightContent from "./components/FlightContent";
 import VendorDashboard from "./pages/vendor/VendorDashboard";
 import MovieVendorDashboard from "./pages/vendor/MovieVendorDashboard";
 import HotelVendorDashboard from "./pages/vendor/HotelVendorDashboard";
+import EventDashboard from "./pages/vendor/EventDashboard";
 import AddMovie from "./pages/vendor/AddMovie";
 import AddFlight from "./pages/vendor/AddFlight";
 import AddHotel from "./pages/vendor/AddHotel";
@@ -98,6 +106,13 @@ function App() {
         <Route path="hotels/:id/guests" element={<HotelGuestDetails />} />
         <Route path="hotels/:id/payment" element={<HotelPayment />} />
         <Route path="my-hotel-bookings" element={<MyHotelBookings />} />
+        <Route path="event" element={<Events />} />
+        <Route path="event/:id" element={<EventDetails />} />
+        <Route path="event/:id/seats" element={<EventSeatSelection />} />
+        <Route path="event/:id/tickets" element={<EventTicketSelection />} />
+        <Route path="event/:id/payment" element={<EventPayment />} />
+        <Route path="event/:id/confirmation/:bookingId" element={<EventConfirmation />} />
+        <Route path="book" element={<BookingSelection />} />
         <Route path="my-bookings" element={<MyBookings />} />
         <Route path="wallet" element={<TixWallet />} />
         <Route path="profile" element={<Profile />} />
@@ -173,6 +188,30 @@ function App() {
         element={
           <ProtectedRoute roles={["vendor", "admin"]}>
             <AddHotel />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendor/events"
+        element={
+          <ProtectedRoute roles={["vendor", "admin"]}>
+            <EventDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendor/event/add"
+        element={
+          <ProtectedRoute roles={["vendor", "admin"]}>
+            <AddEvent />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendor/event/edit/:id"
+        element={
+          <ProtectedRoute roles={["vendor", "admin"]}>
+            <AddEvent />
           </ProtectedRoute>
         }
       />

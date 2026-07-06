@@ -1,6 +1,6 @@
-import React from "react";
 import {
   FaFilm,
+  FaCalendarAlt,
   FaHome,
   FaPlane,
   FaRegHeart,
@@ -9,12 +9,15 @@ import {
   FaSignOutAlt,
   FaTicketAlt,
   FaWallet,
+  FaThLarge,
 } from "react-icons/fa";
 
 const links = [
   { label: "Home", path: "/dashboard", icon: <FaHome /> },
+  { label: "Book", path: "/dashboard/book", icon: <FaThLarge /> },
   { label: "Movies", path: "/dashboard/movies", icon: <FaFilm /> },
   { label: "Flights", path: "/dashboard/flights", icon: <FaPlane /> },
+  { label: "Events", path: "/dashboard/event", icon: <FaCalendarAlt /> },
   { label: "Browse Deals", path: "/dashboard/browse", icon: <FaSearch /> },
   { label: "My Bookings", path: "/dashboard/my-bookings", icon: <FaTicketAlt /> },
   { label: "TixWallet", path: "/dashboard/wallet", icon: <FaWallet /> },

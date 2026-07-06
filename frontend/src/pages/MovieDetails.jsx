@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { FaCalendar, FaClock, FaFilm, FaShareAlt, FaStar, FaTicketAlt } from "react-icons/fa";
@@ -12,12 +12,15 @@ function MovieDetails() {
   const [loading, setLoading] = useState(!location.state?.movie);
 
   useEffect(() => {
+    let active = true;
     const savedMovie = sessionStorage.getItem("selectedMovie");
     const parsedMovie = savedMovie ? JSON.parse(savedMovie) : null;
-    const movieId = id || location.state?.movie?._id || parsedMovie?._id;
+    const stateMovie = location.state?.movie;
+    const seedMovie = stateMovie || parsedMovie;
+    const movieId = id || seedMovie?._id || seedMovie?.id;
 
-    if (!movie && parsedMovie) {
-      setMovie(parsedMovie);
+    if (seedMovie) {
+      setMovie(seedMovie);
       setLoading(false);
     }
 
@@ -25,15 +28,17 @@ function MovieDetails() {
       axios
         .get(`http://localhost:5000/api/movies/${movieId}`)
         .then((res) => {
+          if (!active) return;
           setMovie(res.data);
           sessionStorage.setItem("selectedMovie", JSON.stringify(res.data));
         })
         .catch(() => {})
-        .finally(() => setLoading(false));
+        .finally(() => active && setLoading(false));
     } else {
       setLoading(false);
     }
-  }, [location.state, movie]);
+    return () => { active = false; };
+  }, [id, location.state]);
 
   if (loading) {
     return <div className="movie-details-empty">Loading movie...</div>;

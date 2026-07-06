@@ -1,0 +1,5 @@
+import { Activity, Bus, CalendarDays, Hotel, Map, PackageOpen } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import "./BookingSelection.css";
+const options=[["Events","Concerts, sports, comedy and live experiences","/dashboard/event",CalendarDays,"#087f5b"],["Hotels","Find rooms and stays for every trip","/dashboard/hotels",Hotel,"#2563eb"],["Bus","Search routes, seats and boarding points","/dashboard/bus",Bus,"#d97706"],["Travel Packages","Curated holidays and destination packages","/dashboard/travel",PackageOpen,"#7c3aed"],["Activities","Tours, attractions and local experiences","/dashboard/activities",Activity,"#db2777"]];
+export default function BookingSelection(){const navigate=useNavigate();return <section className="ubs-page"><header><span><Map/></span><small>TIXHUB BOOKING</small><h1>What would you like to book?</h1><p>Choose one service to start a focused booking journey.</p></header><div>{options.map(([title,text,path,Icon,color])=><button key={title} onClick={()=>navigate(path)} style={{"--card-color":color}}><i><Icon/></i><span><h2>{title}</h2><p>{text}</p><b>Explore {title} →</b></span></button>)}</div></section>}

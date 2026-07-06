@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { FaArrowLeft, FaClock, FaFilter, FaMapMarkerAlt, FaRupeeSign, FaTicketAlt } from "react-icons/fa";
@@ -44,22 +44,27 @@ function TheatreShows() {
   const [selectedShow, setSelectedShow] = useState(null);
 
   useEffect(() => {
+    let active = true;
     const savedMovie = sessionStorage.getItem("selectedMovie");
     const parsedMovie = savedMovie ? JSON.parse(savedMovie) : null;
-    const movieId = id || location.state?.movie?._id || parsedMovie?._id;
+    const stateMovie = location.state?.movie;
+    const seedMovie = stateMovie || parsedMovie;
+    const movieId = id || seedMovie?._id || seedMovie?.id;
 
-    if (!movie && parsedMovie) setMovie(parsedMovie);
+    if (seedMovie) setMovie(seedMovie);
 
     if (movieId) {
       axios
         .get(`http://localhost:5000/api/movies/${movieId}`)
         .then((res) => {
+          if (!active) return;
           setMovie(res.data);
           sessionStorage.setItem("selectedMovie", JSON.stringify(res.data));
         })
         .catch(() => {});
     }
-  }, [location.state, movie]);
+    return () => { active = false; };
+  }, [id, location.state]);
 
   if (!movie) {
     return (
